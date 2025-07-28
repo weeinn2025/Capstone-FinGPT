@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Financial Summary</title>
+  <style>
+    table { border-collapse: collapse; width: 80%; }
+    th, td { padding: 8px; border: 1px solid #ccc; text-align: right; }
+    th { background: #f2f2f2; }
+    td:first-child, th:first-child { text-align: left; }
+    .ai-summary { font-style: italic; border-top: 1px solid #ccc; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+
+  {# ← Flashed error messages,to show any flash() messages from your Flask route #}
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <ul style="color: red; list-style: none; padding: 0;">
+        {% for msg in messages %}
+          <li>{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <h2>CSV Data Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Year</th>
+        <th>Line Item</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in summary %}
+      <tr>
+        <td>{{ row['Company'] }}</td>
+        <td>{{ row['Year'] }}</td>
+        <td>{{ row['LineItem'] }}</td>
+        <td>{{ row['Value']|currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {# ——— AI Analysis Section ——— #}
+  {% if ai_text %}
+    <div class="ai-summary">
+      <h3>AI Analysis</h3>
+      <p>{{ ai_text }}</p>
+    
+  
+    <!-- ↓↓↓ Download PDF form inserted here ↓↓↓ -->  
+    <form action="{{ url_for('download_pdf') }}" method="post">
+      <!-- single‑quote wrapper so the inner JSON (with its " marks) survives intact -->
+      <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'
+      >
+      <!-- ai_text is just plain text -->  
+      <input type="hidden" name="ai_text"  value="{{ ai_text }}"
+      >
+      <!-- new: ship the chart PNG as a base64 string -->
+      <input type="hidden" name="chart_data"  value="{{ chart_data }}"
+      > 
+      <button type="submit">Download as PDF</button>
+    </form>
+    <!-- ↑↑↑ end PDF form ↑↑↑ -->
+    
+  {% else %}
+    <p class="ai-summary">
+      <span style="color:red;">
+        No AI insight was generated. Please check your API settings.
+      </span>
+    </p>
+  {% endif %}
+
+  {# ——— Financial Chart ——— #}
+  {% if chart_data %}
+    <div style="margin-top:1.5em;">
+      <h3>Revenue vs Net Income (in USD Billion)</h3>
+      <img src="data:image/png;base64,{{ chart_data }}" 
+         alt="Bar chart of revenue vs net income" 
+         style="max-width:100%;height:auto;border:1px solid #ccc;"/>
+    </div>
+  {% endif %}
+
+  <p><a href="{{ url_for('upload_file') }}">Upload another file</a></p>
+</body>
+</html>
