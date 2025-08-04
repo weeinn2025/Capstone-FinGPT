@@ -38,30 +38,30 @@ Local Setup
 
 1.   Clone your repository
 
-git clone https://github.com/weeinn2025/Capstone-FinGPT.git
-cd Capstone-FinGPT
+     git clone https://github.com/weeinn2025/Capstone-FinGPT.git
+     cd Capstone-FinGPT
 
 2.   Create & activate the environment
 
-conda create -n ml python=3.11
-conda activate ml
-# or use virtualenv
+     conda create -n ml python=3.11
+     conda activate ml
+     # or use virtualenv
 
 3.   Install all the dependencies
 
-pip install -r requirements.txt
+     pip install -r requirements.txt
 
 4.   Configure the environment
 
-Copy .env.example → .env
+     Copy .env.example → .env
 
-Set your FLASK_SECRET_KEY, GEMINI_API_KEY, and GEMINI_URL.
+     Set your FLASK_SECRET_KEY, GEMINI_API_KEY, and GEMINI_URL.
 
 5.   Then Run locally
 
-flask run
+     flask run
 
-Visit http://127.0.0.1:5000
+     Visit http://127.0.0.1:5000
 
 Usage
 =====
@@ -79,11 +79,11 @@ Render (✅ Done)
 
 1.   Add runtime.txt with:
 
-python-3.11.11
+     python-3.11.11
 
 2.   Ensure requirements.txt includes:
 
-gunicorn==20.1.0
+     gunicorn==20.1.0
 
 3.   Connect your GitHub repo & deploy.
 
