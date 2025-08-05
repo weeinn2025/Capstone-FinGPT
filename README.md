@@ -89,6 +89,9 @@ Render (✅ Done)
 Project Structure
 =================
 
+<img width="756" height="267" alt="image" src="https://github.com/user-attachments/assets/935e3aa1-a01d-4b04-9490-645c9f6ad5ec" />
+
+
 Capstone-FinGPT/
 
 ├─ app.py
