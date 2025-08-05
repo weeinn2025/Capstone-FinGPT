@@ -90,7 +90,9 @@ Project Structure
 =================
 
 Capstone-FinGPT/
+
 ├─ app.py
+
 ├─ requirements.txt
 ├─ runtime.txt
 ├─ .env (local only)
