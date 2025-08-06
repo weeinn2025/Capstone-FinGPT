@@ -6,6 +6,7 @@ A lightweight Flask app that allows you to ingest CSV financial data, generate a
 🚀 Live Demo
 
 Render: https://capstone-fingpt.onrender.com
+(takes 2-3 mins to start the app)
 
 📘 Repository
 
