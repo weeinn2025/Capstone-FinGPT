@@ -15,7 +15,7 @@ https://github.com/weeinn2025/Capstone-FinGPT
 Features
 ========
 
-1.   Able to upload any financial statement CSV (limited to 5 MB).
+1.   Able to upload any financial statement CSV (limited to 5 MB). -- > # example: upload sample_income_statement.csv
 
 2.   Able to generate AI‑driven summary & insights via Gemini API.
 
