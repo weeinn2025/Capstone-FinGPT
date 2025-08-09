@@ -1,5 +1,11 @@
-# Environment variables - ENV files
+# Env files - these are used to store environment variables
 .env
+
+# Caches/artifacts
 __pycache__/
 *.pyc
-enhancement_1/
+.pytest_cache/
+
+# Local scratch
+enhancement_*/
+*.zip
