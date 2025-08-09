@@ -1,2 +1,5 @@
 # Environment variables - ENV files
 .env
+__pycache__/
+*.pyc
+enhancement_1/
