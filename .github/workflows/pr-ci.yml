@@ -1,0 +1,52 @@
+name: PR CI
+
+on:
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Lint & format
+        run: |
+          black --check .
+          flake8 .
+
+      - name: Run tests (if present)
+        run: |
+          if [ -d tests ]; then pytest -q; else echo "No tests yet"; fi
+
+      - name: Build Docker image
+        run: |
+          docker build -t fingpt-app:ci .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name app -p 8000:8000 fingpt-app:ci
+          # wait for boot
+          for i in {1..20}; do
+            if curl -fsS http://localhost:8000/health; then
+              echo "health OK"; break
+            fi
+            echo "waiting for app..."; sleep 3
+          done
+          # show logs if failed
+          if ! curl -fsS http://localhost:8000/health; then
+            docker logs app; exit 1
+          fi
+          docker stop app
+          docker rm app
