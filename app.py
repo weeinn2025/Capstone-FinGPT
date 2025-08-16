@@ -67,6 +67,98 @@ def health():
     return {"status": "ok"}, 200
 
 
+# ---- 4b) Upload helpers: allowed types, readers, normalizer ---------
+import zipfile
+
+ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
+
+
+def is_allowed_file(filename: str) -> bool:
+    ext = Path(filename).suffix.lower().lstrip(".")
+    return ext in ALLOWED_EXTENSIONS
+
+
+def read_zip_first_valid(zip_path: Path) -> pd.DataFrame:
+    """Open the first .csv or .xlsx inside a ZIP and return a DataFrame."""
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        members = sorted(
+            [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
+        )
+        if not members:
+            raise ValueError("ZIP has no CSV/XLSX files.")
+        name = members[0]
+        with zf.open(name) as fh:
+            if name.lower().endswith(".csv"):
+                return pd.read_csv(fh)
+            # xlsx
+            return pd.read_excel(fh, engine="openpyxl")
+
+
+def read_anytabular(path: Path) -> pd.DataFrame:
+    """Read CSV/XLSX/ZIP into a DataFrame."""
+    ext = path.suffix.lower()
+    if ext == ".csv":
+        return pd.read_csv(path)
+    if ext == ".xlsx":
+        return pd.read_excel(path, engine="openpyxl")
+    if ext == ".zip":
+        return read_zip_first_valid(path)
+    raise ValueError(f"Unsupported file type: {ext}")
+
+
+_CANON = {
+    "company": ["company", "firm", "name"],
+    "year": ["year", "fiscal_year", "fy"],
+    "lineitem": ["lineitem", "line item", "account", "metric"],
+    "value": ["value", "amount", "val", "amount_usd", "usd"],
+}
+
+
+def _find_alias(cols_lower: dict[str, str], aliases: list[str]) -> str | None:
+    for a in aliases:
+        if a in cols_lower:
+            return cols_lower[a]
+    return None
+
+
+def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
+    """
+    Try to normalize to Company/Year/LineItem/Value (case/space tolerant).
+    Returns (normalized_df, warning_message_or_none).
+    """
+    cols_lower = {c.strip().lower(): c for c in df.columns}
+
+    # first pass: look for friendly aliases
+    mapping_src = {
+        "Company": _find_alias(cols_lower, _CANON["company"]),
+        "Year": _find_alias(cols_lower, _CANON["year"]),
+        "LineItem": _find_alias(cols_lower, _CANON["lineitem"]),
+        "Value": _find_alias(cols_lower, _CANON["value"]),
+    }
+    # fallback: exact canonical (case-insensitive) if present
+    for k in list(mapping_src.keys()):
+        if mapping_src[k] is None and k.lower() in cols_lower:
+            mapping_src[k] = cols_lower[k.lower()]
+
+    missing = [k for k, v in mapping_src.items() if v is None]
+    warn = None
+    if missing:
+        warn = f"Could not auto-map columns: {', '.join(missing)}"
+
+    renamed = df.rename(columns={v: k for k, v in mapping_src.items() if v})
+
+    needed = {"Company", "Year", "LineItem", "Value"}
+    if not needed.issubset(set(renamed.columns)):
+        # return original df with a warning; caller can decide how to proceed
+        return df, warn
+
+    out = renamed[["Company", "Year", "LineItem", "Value"]].copy()
+    out["Year"] = pd.to_numeric(out["Year"], errors="coerce").astype("Int64")
+    out["Value"] = pd.to_numeric(out["Value"], errors="coerce")
+    out = out.dropna(subset=["Year", "Value"])
+    return out, warn
+
+
 # --- 5) Jinja filter for currency formatting ----------------------------
 @app.template_filter("currency")
 def currency_filter(val):
@@ -104,91 +196,143 @@ def index():
 
 
 @app.post("/upload")
-@limiter.limit("10 per minute")  # limit only actual submissions
+@limiter.limit("10 per minute")
 def upload_file():
-    if request.method == "POST":
-        # --- Validation & CSV loading ---
+    saved_name = request.form.get("saved_filename")
+
+    if saved_name:
+        # Came from preview screen
+        filepath = UPLOAD_FOLDER / saved_name
+        if not filepath.exists():
+            flash("Saved file not found. Please upload again.")
+            return redirect(request.url_root)
+    else:
+        # Fresh upload path (backwards compatible)
         if "file" not in request.files:
             flash("No file part in request.")
-            return redirect(request.url)
+            return redirect(request.url_root)
 
         file = request.files["file"]
         if file.filename == "":
             flash("No file selected.")
-            return redirect(request.url)
+            return redirect(request.url_root)
 
-        # Basic CSV check
-        if not file.filename.lower().endswith(".csv"):
-            flash("Please upload a CSV file.")
-            return redirect(request.url)
+        if not is_allowed_file(file.filename):
+            flash("Allowed types: .csv, .xlsx, .zip")
+            return redirect(request.url_root)
 
-        # Save and read
         filepath = UPLOAD_FOLDER / file.filename
         file.save(filepath)
 
+    # Read + normalize (best effort)
+    try:
+        raw_df = read_anytabular(filepath)
+    except Exception as e:
+        flash(f"Error reading file: {e}")
+        return redirect(request.url_root)
+
+    df_norm, warn = normalize_financial_df(raw_df)
+    if warn:
+        flash(warn)
+
+    # Use normalized df if it contains the canonical columns; else fallback
+    needed = {"Company", "Year", "LineItem", "Value"}
+    use_df = df_norm if needed.issubset(set(df_norm.columns)) else raw_df
+
+    df = use_df.head(10)
+    summary = df.to_dict(orient="records")
+
+    # --- Build prompt for AI --------
+    prompt_lines = [
+        f"{r['Company']} {r['Year']} {r['LineItem']}: {r['Value']:,}"
+        for r in summary
+        if all(k in r for k in ("Company", "Year", "LineItem", "Value"))
+    ]
+    prompt = (
+        "Here is a snippet of financial data:\n"
+        + "\n".join(prompt_lines)
+        + "\n\nPlease provide a concise, 2-3 sentence analysis of these figures."
+    )
+
+    # --- Call AI ---------------------
+    if GEMINI_AVAILABLE:
         try:
-            df = pd.read_csv(filepath)
+            ai_text = call_gemini(prompt)
         except Exception as e:
-            flash(f"Error reading CSV: {e}")
-            return redirect(request.url)
+            # if it's a requests.HTTPError you can do:
+            if hasattr(e, "response"):
+                print("FULL URL:", e.response.request.url)
+                print("STATUS CODE:", e.response.status_code)
+                print("BODY:", e.response.text)
+            flash(f"AI call failed: {e}")
+            ai_text = None
+    else:
+        ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
-        df = df.head(10)  # limit for demo, show only first 10 rows
-        # Convert DataFrame to list of dicts
-        summary = df.to_dict(orient="records")
+    # ——— Build bar chart of Revenue vs Net Income ———
+    # Expecting summary like:
+    # {'Company':'Apple Inc.', 'Year':2021, 'LineItem':'Total Revenue', 'Value':81434000000} # noqa: E501
+    # {'Company':'Apple Inc.', 'Year':2021, 'LineItem':'Net Income', 'Value':21744000000} # noqa: E501
 
-        # --- Build prompt for AI --------
-        prompt_lines = [
-            f"{r['Company']} {r['Year']} {r['LineItem']}: {r['Value']:,}"
-            for r in summary
-        ]
-        prompt = (
-            "Here is a snippet of financial data:\n"
-            + "\n".join(prompt_lines)
-            + "\n\nPlease provide a concise, 2-3 sentence analysis of these figures."
-        )
+    labels = [row["LineItem"] for row in summary]
+    values = [row["Value"] for row in summary]
 
-        # --- Call AI ---------------------
-        if GEMINI_AVAILABLE:
-            try:
-                ai_text = call_gemini(prompt)
-            except Exception as e:
-                # if it's a requests.HTTPError you can do:
-                if hasattr(e, "response"):
-                    print("FULL URL:", e.response.request.url)
-                    print("STATUS CODE:", e.response.status_code)
-                    print("BODY:", e.response.text)
-                flash(f"AI call failed: {e}")
-                ai_text = None
-        else:
-            ai_text = "(AI disabled: missing GEMINI_* env vars)"
-
-        # ——— Build bar chart of Revenue vs Net Income ———
-        # Expecting summary like:
-        # {'Company':'Apple Inc.', 'Year':2021, 'LineItem':'Total Revenue', 'Value':81434000000} # noqa: E501
-        # {'Company':'Apple Inc.', 'Year':2021, 'LineItem':'Net Income', 'Value':21744000000} # noqa: E501
-
-        labels = [row["LineItem"] for row in summary]
-        values = [row["Value"] for row in summary]
-
-        fig, ax = plt.subplots()
-        ax.bar(labels, [v / 1e9 for v in values])  # show in billions
-        ax.set_ylabel("Value (USD Billion)")
+    fig, ax = plt.subplots()
+    ax.bar(labels, [v / 1e9 for v in values])  # show in billions
+    ax.set_ylabel("Value (USD Billion)")
+    if summary and "Company" in summary[0] and "Year" in summary[0]:
         ax.set_title(f"{summary[0]['Company']} {summary[0]['Year']}")
 
-        buf = BytesIO()
-        fig.tight_layout()
-        fig.savefig(buf, format="png")
-        plt.close(fig)
-        buf.seek(0)
-        chart_data = base64.b64encode(buf.read()).decode("ascii")
+    buf = BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    buf.seek(0)
+    chart_data = base64.b64encode(buf.read()).decode("ascii")
 
-        # — pass chart_data into template context —
-        return render_template(
-            "result.html", summary=summary, ai_text=ai_text, chart_data=chart_data
-        )
+    # Render result page — pass chart_data into template context —
+    return render_template(
+        "result.html", summary=summary, ai_text=ai_text, chart_data=chart_data
+    )
 
     # GET request
     return render_template("index.html")
+
+
+# ---- 7a) Preview route (save file + show first rows) -----------------
+@app.post("/preview")
+@limiter.limit("10 per minute")
+def preview():
+    if "file" not in request.files:
+        flash("No file part in request.")
+        return redirect(request.url_root)
+
+    file = request.files["file"]
+    if file.filename == "":
+        flash("No file selected.")
+        return redirect(request.url_root)
+
+    if not is_allowed_file(file.filename):
+        flash("Allowed types: .csv, .xlsx, .zip")
+        return redirect(request.url_root)
+
+    # Save to uploads/
+    saved_path = UPLOAD_FOLDER / file.filename
+    file.save(saved_path)
+
+    try:
+        df = read_anytabular(saved_path)
+        # show only first 10 rows, raw (pre-normalization)
+        preview_rows = df.head(10).to_dict(orient="records")
+    except Exception as e:
+        flash(f"Could not read file: {e}")
+        return redirect(request.url_root)
+
+    return render_template(
+        "preview.html",
+        saved_filename=saved_path.name,
+        preview_rows=preview_rows,
+    )
 
 
 # ---- 8) PDF Download Route ------------------------------------------

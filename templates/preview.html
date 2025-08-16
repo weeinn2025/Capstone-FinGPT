@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Preview — Upload</title>
+</head>
+<body>
+  <h2>File preview (first 10 rows)</h2>
+  {% if saved_filename %}
+    <p><strong>File:</strong> {{ saved_filename }}</p>
+  {% endif %}
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <ul style="color: red;">
+        {% for msg in messages %}
+          <li>{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <table border="1" cellpadding="6">
+    {% if preview_rows and preview_rows|length > 0 %}
+      <caption style="text-align:left; margin-bottom:6px;">
+        Showing {{ preview_rows|length }} rows
+      </caption>
+      <thead>
+        <tr>
+          {% for k in preview_rows[0].keys() %}
+            <th>{{ k }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview_rows %}
+          <tr>
+            {% for v in row.values() %}
+              <td>{{ v }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    {% else %}
+      <tr><td>No rows</td></tr>
+    {% endif %}
+  </table>
+
+  <hr>
+
+  <!-- Continue with this saved file -->
+  <form method="POST" action="{{ url_for('upload_file') }}">
+    <input type="hidden" name="saved_filename" value="{{ saved_filename }}">
+    <button type="submit">Analyze this file</button>
+  </form>
+
+  <p style="margin-top:8px;">
+    <a href="{{ url_for('index') }}">Upload a different file</a>
+  </p>
+</body>
+</html>

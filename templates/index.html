@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
-<head><title>Upload Financial CSV</title></head>
-<body>
-    <h2>Upload Your Financial Statement CSV</h2>
+  <head><title>Upload Financial Statement</title></head>
+  <body>
+    <h2>Upload Your Financial Statement</h2>
 
     <!-- Flash messages -->
     {% with messages = get_flashed_messages() %}
       {% if messages %}
-        <ul style="color: red;">
+        <ul style="color:red;">
           {% for msg in messages %}
             <li>{{ msg }}</li>
           {% endfor %}
@@ -17,8 +17,15 @@
 
     <!-- File upload form -->
     <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".csv,.xlsx,.zip" required>
-        <input type="submit" value="Upload and Analyze">
+      <label for="file">Choose CSV/XLSX/ZIP (max 5 MB):</label><br>
+      <input id="file" type="file" name="file" accept=".csv,.xlsx,.zip" required>
+
+      <div style="margin-top:8px;">
+        <button type="submit">Analyze</button>
+        <button type="submit"
+                formaction="{{ url_for('preview') }}"
+                formmethod="post">Preview</button>
+      </div>
     </form>
-</body>
+  </body>
 </html>
