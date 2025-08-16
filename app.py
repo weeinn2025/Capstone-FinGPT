@@ -97,8 +97,6 @@ def call_gemini(prompt: str) -> str:
 
 
 # ---- 7) Upload & AI Analysis Route -----------------------------------------------
-# previously:  @app.route("/", methods=["GET", "POST"])
-# previously:  @limiter.limit("10 per minute")  # limit to 10 uploads per minute
 @app.get("/")
 @limiter.exempt  # GET homepage is never rate-limited
 def index():
