@@ -9,3 +9,4 @@ gunicorn==20.1.0
 black
 flake8
 pytest
+openpyxl==3.1.2      # <-- add this line
