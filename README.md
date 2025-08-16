@@ -6,7 +6,13 @@ A lightweight Flask app to ingest financial statements, preview/clean them, gene
 🚀 Live demo
 
 Render: https://capstone-fingpt.onrender.com
+
 (Free tier: cold starts can take 2–3 minutes.)
+
+Render deployment notes:
+✅   On first visit after idle, Render cold-starts the service (wait 1–2 min).
+✅   If you ever see “Too many requests” on the home page, the page is now exempt from rate limiting; refresh the browser once and it should clear. If it doesn’t, wait 60s and try again.
+
 
 📘 Repository
 
@@ -136,10 +142,6 @@ Render (✅ Done)
      gunicorn==20.1.0
 
 3.   Connect your GitHub repo & deploy.
-
-Render deployment notes:
-✅   On first visit after idle, Render cold-starts the service (wait 1–2 min).
-✅   If you ever see “Too many requests” on the home page, the page is now exempt from rate limiting; refresh the browser once and it should clear. If it doesn’t, wait 60s and try again.
 
 
 Project Structure
