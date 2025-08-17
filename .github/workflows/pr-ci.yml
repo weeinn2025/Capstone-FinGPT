@@ -5,7 +5,23 @@ on:
     branches: [ main, master ]
 
 jobs:
+  secrets-scan:
+    name: Secret scan (trufflehog v3)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # trufflehog 'git' mode needs history
+      - name: Run trufflehog (git history, verified only)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src trufflesecurity/trufflehog:latest \
+            git file:///src --only-verified --json --fail
+
   ci:
+    needs: [secrets-scan]   # <— make the main CI wait for (and depend on) the secrets scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
