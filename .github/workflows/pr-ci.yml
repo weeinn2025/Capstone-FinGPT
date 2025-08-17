@@ -3,6 +3,15 @@ name: PR CI
 on:
   pull_request:
     branches: [ main, master ]
+  push:
+    branches: [ main ]               # run CI when pushing to main
+    paths:                           # optional: only when relevant files change
+      - '**/*.py'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'templates/**'
+      - 'tests/**'
+      - '.github/workflows/**'
 
 jobs:
   secrets-scan:
