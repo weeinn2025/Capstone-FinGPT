@@ -1,0 +1,38 @@
+# Python junk
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.env
+.env.*
+
+# Tests & tooling artifacts
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.cache/
+.ipynb_checkpoints/
+
+# VCS / CI / docs that aren't needed at runtime
+.git/
+.gitattributes
+.gitignore
+.github/
+*.md
+
+# Local data & heavy sample files (don’t ship to container)
+uploads/*
+!uploads/.gitkeep
+*.csv
+*.xlsx
+*.zip
+*.pdf
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
