@@ -5,6 +5,10 @@ import json
 import base64
 from pathlib import Path
 from io import BytesIO
+import numpy as np
+
+import plotly.graph_objects as go
+from plotly.utils import PlotlyJSONEncoder
 
 # Ensure matplotlib uses a non-GUI backend
 import matplotlib
@@ -27,22 +31,16 @@ import pandas as pd
 import requests
 from weasyprint import HTML
 
-
 # ---- 1) Load environment variables ----------------------------------
 # Make sure this happens *before* you read from os.environ
 ENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
-
 
 # ---- 2) Grab secrets / config ---------------------------------------
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_URL = os.environ.get("GEMINI_URL")
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY and GEMINI_URL)  # <-- instead of raising
-
-# if not GEMINI_API_KEY or not GEMINI_URL:
-#    raise RuntimeError("Missing GEMINI_API_KEY or GEMINI_URL in .env")
-
 
 # ---- 3) Flask app setup ---------------------------------------------
 app = Flask(__name__)
@@ -159,6 +157,144 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     return out, warn
 
 
+def build_plotly_chart(clean_df, latest_year=None):
+    """
+    Returns a Plotly figure: grouped bars of Revenue vs Net income
+    for each Company in the selected/latest Year.
+    Expects canonical columns: Company | Year | LineItem | Value
+    """
+    df = clean_df.copy()
+
+    # Use latest year if present
+    if "Year" in df.columns and df["Year"].notna().any():
+        if latest_year is None:
+            latest_year = int(df["Year"].dropna().max())
+        df = df[df["Year"] == latest_year]
+    else:
+        latest_year = None
+
+    # ------ NEW: canonicalize LineItem values ------------------------
+    li_norm = (
+        df["LineItem"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z]+", " ", regex=True)
+        .str.strip()
+    )
+
+    df["LI_CANON"] = np.select(
+        [
+            li_norm.str.contains(r"\b(net income|net profit|profit)\b"),
+            li_norm.str.contains(r"\b(revenue|total revenue|sales|total sales)\b"),
+        ],
+        ["Net income", "Revenue"],
+        default=df["LineItem"].astype(str),
+    )
+
+    # --- Build pivot on the canonical names build traces --------------
+    print("Line items seen:", sorted(df["LI_CANON"].unique()))
+
+    need = df["LI_CANON"].isin(["Revenue", "Net income"])
+    pivot = (
+        df[need]
+        .pivot_table(index="Company", columns="LI_CANON", values="Value", aggfunc="sum")
+        .fillna(0.0)
+        .sort_index()
+    )
+
+    fig = go.Figure()
+    # x_vals = pivot.index.astype(str).tolist()
+
+    if "Revenue" in pivot.columns:
+        fig.add_bar(name="Revenue", x=pivot.index.tolist(), y=pivot["Revenue"].tolist())
+
+    if "Net income" in pivot.columns:
+        fig.add_bar(
+            name="Net income", x=pivot.index.tolist(), y=pivot["Net income"].tolist()
+        )
+
+    title_year = f" — {latest_year}" if latest_year is not None else ""
+    fig.update_layout(
+        barmode="group",
+        title=f"Revenue vs Net income{title_year}",
+        xaxis_title="Company",
+        yaxis_title="Value",
+        margin=dict(l=40, r=20, t=60, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+# --- Matplotlib fallback snapshot (multi-company grouped bars) -------
+def build_matplotlib_grouped(clean_df, latest_year=None):
+    import numpy as np
+
+    df = clean_df.copy()
+
+    # Use latest year if present
+    if "Year" in df.columns and df["Year"].notna().any():
+        if latest_year is None:
+            latest_year = int(df["Year"].dropna().max())
+        df = df[df["Year"] == latest_year]
+    else:
+        latest_year = None
+
+    # Canonicalize line items like the Plotly path
+    li_norm = (
+        df["LineItem"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z]+", " ", regex=True)
+        .str.strip()
+    )
+    df["LI_CANON"] = np.select(
+        [
+            li_norm.str.contains(r"\b(net income|net profit|profit)\b"),
+            li_norm.str.contains(r"\b(revenue|total revenue|sales|total sales)\b"),
+        ],
+        ["Net income", "Revenue"],
+        default=df["LineItem"].astype(str),
+    )
+
+    pivot = (
+        df[df["LI_CANON"].isin(["Revenue", "Net income"])]
+        .pivot_table(index="Company", columns="LI_CANON", values="Value", aggfunc="sum")
+        .fillna(0.0)
+        .sort_index()
+    )
+
+    companies = pivot.index.tolist()
+    rev = (
+        pivot["Revenue"].tolist()
+        if "Revenue" in pivot.columns
+        else [0.0] * len(companies)
+    )
+    ni = (
+        pivot["Net income"].tolist()
+        if "Net income" in pivot.columns
+        else [0.0] * len(companies)
+    )
+
+    x = np.arange(len(companies))
+    width = 0.38
+    fig, ax = plt.subplots(figsize=(9, 4.8))
+    ax.bar(x - width / 2, rev, width, label="Revenue")
+    ax.bar(x + width / 2, ni, width, label="Net income")
+    ax.set_xticks(x)
+    ax.set_xticklabels(companies, rotation=25, ha="right")
+    title_year = f" — {latest_year}" if latest_year is not None else ""
+    ax.set_title(f"Revenue vs Net income{title_year}")
+    ax.set_ylabel("Value")
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=160)
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("ascii")
+
+
 # --- 5) Jinja filter for currency formatting ----------------------------
 @app.template_filter("currency")
 def currency_filter(val):
@@ -269,34 +405,43 @@ def upload_file():
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
-    # ——— Build bar chart of Revenue vs Net Income ———
-    # Expecting summary like:
-    # {'Company':'Apple Inc.', 'Year':2021, 'LineItem':'Total Revenue', 'Value':81434000000} # noqa: E501
-    # {'Company':'Apple Inc.', 'Year':2021, 'LineItem':'Net Income', 'Value':21744000000} # noqa: E501
+    # Build interactive Plotly chart + PNG snapshot for PDF (Matplotlib fallback)
+    # fig_json must always be defined (None means "no interactive chart")
+    fig_json = None  # <-- KEY: ensure defined for all paths
 
-    labels = [row["LineItem"] for row in summary]
-    values = [row["Value"] for row in summary]
+    # Use the normalized dataframe (clean_df) for the chart:
+    has_canonical = {"Company", "Year", "LineItem", "Value"}.issubset(use_df.columns)
 
-    fig, ax = plt.subplots()
-    ax.bar(labels, [v / 1e9 for v in values])  # show in billions
-    ax.set_ylabel("Value (USD Billion)")
-    if summary and "Company" in summary[0] and "Year" in summary[0]:
-        ax.set_title(f"{summary[0]['Company']} {summary[0]['Year']}")
+    if has_canonical:
+        # 1) Interactive Plotly figure for the page
+        fig = build_plotly_chart(use_df)
+        fig_json = json.dumps(fig, cls=PlotlyJSONEncoder)  # pass to template
 
-    buf = BytesIO()
-    fig.tight_layout()
-    fig.savefig(buf, format="png")
-    plt.close(fig)
-    buf.seek(0)
-    chart_data = base64.b64encode(buf.read()).decode("ascii")
+        # 2) Try to produce a PNG for the PDF using Kaleido
+        try:
+            png_bytes = fig.to_image(format="png", scale=2)  # needs 'kaleido'
+            chart_data = base64.b64encode(png_bytes).decode("ascii")
+        except Exception as e:
+            app.logger.warning(
+                "Plotly->PNG failed (kaleido). "
+                "Falling back to Matplotlib grouped. "
+                f"Error: {e}"
+            )
+            chart_data = build_matplotlib_grouped(use_df)
+    else:
+        # No canonical columns - try a grouped fallback using whatever we can
+        chart_data = build_matplotlib_grouped(use_df)
 
-    # Render result page — pass chart_data into template context —
+    # 3) Render results page (this line must be de-dented to function level)
+    # Keep `chart_data` (base64 PNG) for PDF and add `fig_json` for the
+    # interactive Plotly chart in the template.
     return render_template(
-        "result.html", summary=summary, ai_text=ai_text, chart_data=chart_data
+        "result.html",
+        summary=summary,
+        ai_text=ai_text,
+        chart_data=chart_data,  # base64 PNG for PDF
+        fig_json=fig_json,  # None => template falls back to PNG <-- NEW
     )
-
-    # GET request
-    return render_template("index.html")
 
 
 # ---- 7a) Preview route (save file + show first rows) -----------------
@@ -352,7 +497,7 @@ def download_pdf():
     )
 
     # 3) ask WeasyPrint to turn that into a PDF
-    # generate a PDF bytes -- > base_url ensures CSS/static links resolve correctly
+    # generate a PDF bytes - base_url ensures CSS/static links resolve correctly
     # disable outline/bookmarks to avoid the TypeError in WeasyPrint
     pdf_bytes = HTML(
         string=html_out,
@@ -369,5 +514,5 @@ def download_pdf():
 
 
 if __name__ == "__main__":
-    # enable full tracebacks in the browser - show the full Python error in your browser
+    # enable full tracebacks in browser - show full Python error in browser
     app.run(debug=True)
