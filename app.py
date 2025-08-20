@@ -180,10 +180,10 @@ def build_plotly_chart(clean_df, latest_year=None):
     else:
         latest_year = None
 
-
     # ------ NEW: canonicalize LineItem values ------------------------
     li_norm = (
-        df["LineItem"].astype(str)
+        df["LineItem"]
+        .astype(str)
         .str.lower()
         .str.replace(r"[^a-z]+", " ", regex=True)
         .str.strip()
@@ -198,10 +198,9 @@ def build_plotly_chart(clean_df, latest_year=None):
         default=df["LineItem"].astype(str),
     )
 
-
     # ---- Build pivot on the canonical names build traces ---------------------------------------
     print("Line items seen:", sorted(df["LI_CANON"].unique()))
-    
+
     need = df["LI_CANON"].isin(["Revenue", "Net income"])
     pivot = (
         df[need]
@@ -211,15 +210,16 @@ def build_plotly_chart(clean_df, latest_year=None):
     )
 
     fig = go.Figure()
-    #x_vals = pivot.index.astype(str).tolist()
-    
+    # x_vals = pivot.index.astype(str).tolist()
+
     if "Revenue" in pivot.columns:
         fig.add_bar(name="Revenue", x=pivot.index.tolist(), y=pivot["Revenue"].tolist())
 
     if "Net income" in pivot.columns:
-        fig.add_bar(name="Net income", x=pivot.index.tolist(), y=pivot["Net income"].tolist())
+        fig.add_bar(
+            name="Net income", x=pivot.index.tolist(), y=pivot["Net income"].tolist()
+        )
 
- 
     title_year = f" — {latest_year}" if latest_year is not None else ""
     fig.update_layout(
         barmode="group",
@@ -235,6 +235,7 @@ def build_plotly_chart(clean_df, latest_year=None):
 # --- Matplotlib fallback snapshot (multi-company grouped bars) -------
 def build_matplotlib_grouped(clean_df, latest_year=None):
     import numpy as np
+
     df = clean_df.copy()
 
     # Use latest year if present
@@ -247,7 +248,8 @@ def build_matplotlib_grouped(clean_df, latest_year=None):
 
     # Canonicalize line items like the Plotly path
     li_norm = (
-        df["LineItem"].astype(str)
+        df["LineItem"]
+        .astype(str)
         .str.lower()
         .str.replace(r"[^a-z]+", " ", regex=True)
         .str.strip()
@@ -269,14 +271,22 @@ def build_matplotlib_grouped(clean_df, latest_year=None):
     )
 
     companies = pivot.index.tolist()
-    rev = pivot["Revenue"].tolist() if "Revenue" in pivot.columns else [0.0] * len(companies)
-    ni  = pivot["Net income"].tolist() if "Net income" in pivot.columns else [0.0] * len(companies)
+    rev = (
+        pivot["Revenue"].tolist()
+        if "Revenue" in pivot.columns
+        else [0.0] * len(companies)
+    )
+    ni = (
+        pivot["Net income"].tolist()
+        if "Net income" in pivot.columns
+        else [0.0] * len(companies)
+    )
 
     x = np.arange(len(companies))
     width = 0.38
     fig, ax = plt.subplots(figsize=(9, 4.8))
-    ax.bar(x - width/2, rev, width, label="Revenue")
-    ax.bar(x + width/2, ni,  width, label="Net income")
+    ax.bar(x - width / 2, rev, width, label="Revenue")
+    ax.bar(x + width / 2, ni, width, label="Net income")
     ax.set_xticks(x)
     ax.set_xticklabels(companies, rotation=25, ha="right")
     title_year = f" — {latest_year}" if latest_year is not None else ""
@@ -402,10 +412,9 @@ def upload_file():
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
-
     # ——— Build interactive Plotly chart + PNG snapshot for PDF (fallback to Matplotlib)———
     # fig_json must always be defined (None means "no interactive chart")
-    fig_json = None               # <-- KEY: ensure defined for all paths
+    fig_json = None  # <-- KEY: ensure defined for all paths
 
     # Use the normalized dataframe (clean_df) for the chart:
     has_canonical = {"Company", "Year", "LineItem", "Value"}.issubset(use_df.columns)
@@ -420,13 +429,15 @@ def upload_file():
             png_bytes = fig.to_image(format="png", scale=2)  # needs 'kaleido'
             chart_data = base64.b64encode(png_bytes).decode("ascii")
         except Exception as e:
-            app.logger.warning(f"Plotly->PNG failed (kaleido). Falling back to Matplotlib grouped. Error: {e}")
+            app.logger.warning(
+                f"Plotly->PNG failed (kaleido). Falling back to Matplotlib grouped. Error: {e}"
+            )
             chart_data = build_matplotlib_grouped(use_df)
 
     else:
         # No canonical columns -> still try a grouped fallback using whatever we can
         chart_data = build_matplotlib_grouped(use_df)
-   
+
     # 3) Render results page (note: this line must be de-dented to function level)
     # Keep `chart_data` (base64 PNG) for PDF and add `fig_json` for the
     # interactive Plotly chart in the template.
@@ -434,8 +445,8 @@ def upload_file():
         "result.html",
         summary=summary,
         ai_text=ai_text,
-        chart_data=chart_data,    # base64 PNG for PDF
-        fig_json=fig_json,        # None => template falls back to PNG <-- NEW
+        chart_data=chart_data,  # base64 PNG for PDF
+        fig_json=fig_json,  # None => template falls back to PNG <-- NEW
     )
 
 
