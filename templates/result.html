@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>AI Financial Summary</title>
   <style>
     table { border-collapse: collapse; width: 80%; }
@@ -50,23 +51,19 @@
     <div class="ai-summary">
       <h3>AI Analysis</h3>
       <p>{{ ai_text }}</p>
-    
-  
-    <!-- ↓↓↓ Download PDF form inserted here ↓↓↓ -->  
-    <form action="{{ url_for('download_pdf') }}" method="post">
-      <!-- single‑quote wrapper so the inner JSON (with its " marks) survives intact -->
-      <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'
-      >
-      <!-- ai_text is just plain text -->  
-      <input type="hidden" name="ai_text"  value="{{ ai_text }}"
-      >
-      <!-- new: ship the chart PNG as a base64 string -->
-      <input type="hidden" name="chart_data"  value="{{ chart_data }}"
-      > 
-      <button type="submit">Download as PDF</button>
-    </form>
-    <!-- ↑↑↑ end PDF form ↑↑↑ -->
-    
+
+      <!-- ↓↓↓ Download PDF form inserted here ↓↓↓ -->
+      <form action="{{ url_for('download_pdf') }}" method="post">
+        <!-- single-quote wrapper so the inner JSON (with its " marks) survives intact -->
+        <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'>
+        <!-- ai_text is just plain text -->
+        <input type="hidden" name="ai_text" value="{{ ai_text }}">
+        <!-- new: ship the chart PNG as a base64 string -->
+        <input type="hidden" name="chart_data" value="{{ chart_data }}">
+        <button type="submit">Download as PDF</button>
+      </form>
+    </div>  {# <-- close .ai-summary div #}
+
   {% else %}
     <p class="ai-summary">
       <span style="color:red;">
@@ -76,15 +73,34 @@
   {% endif %}
 
   {# ——— Financial Chart ——— #}
-  {% if chart_data %}
+  {% if fig_json %}
     <div style="margin-top:1.5em;">
-      <h3>Revenue vs Net Income (in USD Billion)</h3>
-      <img src="data:image/png;base64,{{ chart_data }}" 
-         alt="Bar chart of revenue vs net income" 
-         style="max-width:100%;height:auto;border:1px solid #ccc;"/>
+      <h3>Revenue vs Net Income — interactive</h3>
+      <div id="plotly-chart" style="width:100%;max-width:1000px;height:420px;"></div>
+    </div>
+
+    <!-- Plotly CDN (loads once on this page) -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script>
+      // `fig_json` is a JSON string generated with PlotlyJSONEncoder in Flask.
+      // We embed it as a real JS object (no quotes) using `|safe`.
+      const fig = {{ fig_json | safe }};
+      const config = { responsive: true, displaylogo: false };
+      Plotly.newPlot('plotly-chart', fig.data, fig.layout || {}, config);
+    </script>
+
+  {% elif chart_data %}
+    {# Fallback to the static PNG if we don't have Plotly JSON #}
+    <div style="margin-top:1.5em;">
+      <h3>Revenue vs Net Income (static)</h3>
+      <img
+        src="data:image/png;base64,{{ chart_data }}"
+        alt="Bar chart of revenue vs net income"
+        style="max-width:100%;height:auto;border:1px solid #ccc;"
+      />
     </div>
   {% endif %}
 
-  <p><a href="{{ url_for('upload_file') }}">Upload another file</a></p>
+  <p><a href="{{ url_for('index') }}">Upload another file</a></p>
 </body>
 </html>

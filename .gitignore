@@ -9,3 +9,11 @@ __pycache__/
 # Local scratch
 enhancement_*/
 *.zip
+
+# Runtime and local artifacts
+/.pdf/
+*.pdf
+
+# User uploads should never be versioned
+/uploads/*
+!/uploads/.gitkeep
