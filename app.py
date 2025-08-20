@@ -22,10 +22,7 @@ from flask import (
     render_template,
     request,
     redirect,
-    url_for,
-    session,
     flash,
-    jsonify,
     send_file,
 )
 from flask_limiter import Limiter
@@ -34,19 +31,16 @@ import pandas as pd
 import requests
 from weasyprint import HTML
 
-
 # ---- 1) Load environment variables ----------------------------------
 # Make sure this happens *before* you read from os.environ
 ENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
-
 
 # ---- 2) Grab secrets / config ---------------------------------------
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_URL = os.environ.get("GEMINI_URL")
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY and GEMINI_URL)  # <-- instead of raising
-
 
 # ---- 3) Flask app setup ---------------------------------------------
 app = Flask(__name__)
@@ -58,7 +52,6 @@ app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 # ensure uploads folder exists
 UPLOAD_FOLDER = Path(__file__).parent / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
-
 
 # ---- 4) Rate limiter ------------------------------------------------
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
@@ -198,7 +191,7 @@ def build_plotly_chart(clean_df, latest_year=None):
         default=df["LineItem"].astype(str),
     )
 
-    # ---- Build pivot on the canonical names build traces ---------------------------------------
+    # --- Build pivot on the canonical names build traces --------------
     print("Line items seen:", sorted(df["LI_CANON"].unique()))
 
     need = df["LI_CANON"].isin(["Revenue", "Net income"])
@@ -412,7 +405,7 @@ def upload_file():
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
-    # ——— Build interactive Plotly chart + PNG snapshot for PDF (fallback to Matplotlib)———
+    # Build interactive Plotly chart + PNG snapshot for PDF (Matplotlib fallback)
     # fig_json must always be defined (None means "no interactive chart")
     fig_json = None  # <-- KEY: ensure defined for all paths
 
@@ -430,15 +423,16 @@ def upload_file():
             chart_data = base64.b64encode(png_bytes).decode("ascii")
         except Exception as e:
             app.logger.warning(
-                f"Plotly->PNG failed (kaleido). Falling back to Matplotlib grouped. Error: {e}"
+                "Plotly->PNG failed (kaleido). "
+                "Falling back to Matplotlib grouped. "
+                f"Error: {e}"
             )
             chart_data = build_matplotlib_grouped(use_df)
-
     else:
-        # No canonical columns -> still try a grouped fallback using whatever we can
+        # No canonical columns - try a grouped fallback using whatever we can
         chart_data = build_matplotlib_grouped(use_df)
 
-    # 3) Render results page (note: this line must be de-dented to function level)
+    # 3) Render results page (this line must be de-dented to function level)
     # Keep `chart_data` (base64 PNG) for PDF and add `fig_json` for the
     # interactive Plotly chart in the template.
     return render_template(
@@ -503,7 +497,7 @@ def download_pdf():
     )
 
     # 3) ask WeasyPrint to turn that into a PDF
-    # generate a PDF bytes -- > base_url ensures CSS/static links resolve correctly
+    # generate a PDF bytes - base_url ensures CSS/static links resolve correctly
     # disable outline/bookmarks to avoid the TypeError in WeasyPrint
     pdf_bytes = HTML(
         string=html_out,
@@ -520,5 +514,5 @@ def download_pdf():
 
 
 if __name__ == "__main__":
-    # enable full tracebacks in the browser - show the full Python error in your browser
+    # enable full tracebacks in browser - show full Python error in browser
     app.run(debug=True)
