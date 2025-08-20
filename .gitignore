@@ -17,3 +17,6 @@ enhancement_*/
 # User uploads should never be versioned
 /uploads/*
 !/uploads/.gitkeep
+
+# keep demo ZIP fixtures under samples
+!samples/*.zip
