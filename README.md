@@ -27,7 +27,7 @@ Features
      - ✅   support **.csv**   (header row required, example: Company,Year,LineItem,Value)
      - ✅   support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
      - ✅   Try the samples:   `sample_companies_2024.csv` (for multi-company grouped bars) ,`sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
-    
+
 3.   **Preview before analysis**
      - ✅   see the **first 10 rows** on a `/preview` screen before analysis, then click **Analyze this file**.
 
@@ -57,6 +57,7 @@ Features
      - ✅   To enable Plotly → PNG locally, install Chrome once:
             ```bash
              plotly_get_chrome
+     - ✅   ![Sample PDF report (page 1)](static/report_preview.png)
   
 8.   **Samples**
      - ✅   in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
