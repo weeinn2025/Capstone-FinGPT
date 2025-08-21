@@ -57,7 +57,8 @@ Features
      - ✅   To enable Plotly → PNG locally, install Chrome once:
             ```bash
              plotly_get_chrome
-     - ✅   ![Sample PDF report (page 1)](static/report_preview.png)
+     - ✅   “this is what the output looks like” with short narrative - AI analysis:
+             ![Sample PDF report (page 1)](static/report_preview.png)
         
   
 8.   **Samples**
