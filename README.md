@@ -19,7 +19,7 @@ https://github.com/weeinn2025/Capstone-FinGPT
 
 Features
 ========
-(Note: “interactive” charts aren’t live yet.  Work-in-progress to enhance more features.)
+(Note: Work-in-progress to enhance more features.)
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
