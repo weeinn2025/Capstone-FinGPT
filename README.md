@@ -27,11 +27,7 @@ Features
      - ✅   support **.csv**   (header row required, example: Company,Year,LineItem,Value)
      - ✅   support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
      - ✅   Try the samples:   `sample_companies_2024.csv` (for multi-company grouped bars) ,`sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
-     - ✅  support **.xlxs**  (via `pandas` + `openpyxl`- same logical columns; multiple sheets are supported (first sheet is read by default))
-     - ✅  support **.csv**   (header row required, example: Company,Year,LineItem,Value)
-     - ✅  support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
-     - ✅  Try the samples:   `sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`, `sample_companies_2024.csv`.
-
+    
 3.   **Preview before analysis**
      - ✅   see the **first 10 rows** on a `/preview` screen before analysis, then click **Analyze this file**.
 
