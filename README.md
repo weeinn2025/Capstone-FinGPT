@@ -19,7 +19,7 @@ https://github.com/weeinn2025/Capstone-FinGPT
 
 Features
 ========
-(Note: “interactive” charts aren’t live yet.  Work-in-progress to enhance more features.)
+(Note: Work-in-progress to enhance more features.)
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
@@ -58,7 +58,6 @@ Features
             ```bash
              plotly_get_chrome
      - ✅   ![Sample PDF report (page 1)](static/report_preview.png)
-        
   
 8.   **Samples**
      - ✅   in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
