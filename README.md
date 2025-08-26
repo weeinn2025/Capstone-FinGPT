@@ -19,7 +19,7 @@ https://github.com/weeinn2025/Capstone-FinGPT
 
 Features
 ========
-(Note: Work-in-progress to enhance more features.)
+(Note: Work-in-progress to enhance more features with advanced visualization and AI.)
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
