@@ -66,7 +66,6 @@ Features
              plotly_get_chrome
      - ✅   “this is what the output looks like” with short narrative - AI analysis:
             ![Sample PDF report (page 1)](static/report_preview.png)
-
             ** To note: **
             • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
             • Some of 2024 lines appear to be calendar-year or a later fiscal year instead of each company’s FY2024.
