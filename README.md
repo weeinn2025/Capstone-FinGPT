@@ -16,6 +16,13 @@ Render deployment notes:
 
 https://github.com/weeinn2025/Capstone-FinGPT
 
+> **Disclaimer**
+> The sample dataset in this repository is illustrative and may mix calendar and
+> fiscal years because companies have different year-ends (e.g., Apple ≈ late Sep,
+> Microsoft ≈ Jun 30, NVIDIA ≈ late Jan). Values are simplified/rounded and may not
+> match any single audited filing. Do not use for investment decisions. Always verify
+> against the company’s latest 10-K/10-Q or annual report.
+
 
 Features
 ========
