@@ -26,7 +26,7 @@ https://github.com/weeinn2025/Capstone-FinGPT
 
 Features
 ========
-(Note: Continuous improvement and Work-in-progress to enhance more features with advanced visualization and AI.)
+(Note: “The application is a work in progress with ongoing enhancements, including advanced features, visualization, and AI, with a demo available upon request.”)
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
