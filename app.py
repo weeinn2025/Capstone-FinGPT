@@ -54,7 +54,10 @@ UPLOAD_FOLDER = Path(__file__).parent / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 # ---- 4) Rate limiter ------------------------------------------------
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+storage_uri = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+limiter = Limiter(
+    key_func=get_remote_address, default_limits=[], storage_uri=storage_uri
+)
 limiter.init_app(app)
 
 
