@@ -608,14 +608,12 @@ def upload_file():
         "result.html",
         summary=summary,
         ai_text=ai_text,
-        chart_data=chart_data,  # base64 PNG for PDF - latest-year bars (already there)
+        chart_data=chart_data,  # base64 PNG for PDF (latest-year bars)
         fig_json=fig_json,  # None => template falls back to PNG <-- NEW
         years=years,  # NEW
         figs_by_year_json=figs_by_year_json,  # NEW
         fig_all_json=fig_all_json,  # <-- NEW
         chart_data_all=chart_data_all,  # <-- NEW
-        chart_data=chart_data,  # base64 PNG for PDF
-        fig_json=fig_json,  # None => template falls back to PNG <-- NEW
     )
 
 
