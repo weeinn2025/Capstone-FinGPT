@@ -16,10 +16,17 @@ Render deployment notes:
 
 https://github.com/weeinn2025/Capstone-FinGPT
 
+> **Disclaimer**
+> The sample dataset in this repository is illustrative and may mix calendar and
+> fiscal years because companies have different year-ends (e.g., Apple ≈ late Sep,
+> Microsoft ≈ Jun 30, NVIDIA ≈ late Jan). Values are simplified/rounded and may not
+> match any single audited filing. Do not use for investment decisions. Always verify
+> against the company’s latest 10-K/10-Q or annual report.
+
 
 Features
 ========
-(Note: “interactive” charts aren’t live yet.  Work-in-progress to enhance more features.)
+(Note: “The application is a work in progress with ongoing enhancements, including advanced features, visualization, and AI, with a demo available upon request.”)
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
@@ -58,7 +65,16 @@ Features
             ```bash
              plotly_get_chrome
      - ✅   “this is what the output looks like” with short narrative - AI analysis:
+
              ![Sample PDF report (page 1)](static/report_preview.png)
+
+            ![Sample PDF report (page 1)](static/report_preview.png)
+            **To Note:**
+            • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
+            • Some of 2024 lines appear to be calendar-year or a later fiscal year instead of each company’s FY2024.
+            • One Apple row (“Shareholders’ Equity $75B”) seems copied from an earlier year; Apple shows negative equity in FY2024 due to buybacks. 
+              [annualreports.com]
+
         
   
 8.   **Samples**
