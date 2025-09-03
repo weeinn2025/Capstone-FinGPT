@@ -8,6 +8,11 @@
     th { background: #f2f2f2; }
     td:first-child, th:first-child { text-align: left; }
     .ai-summary { font-style: italic; border-top: 1px solid #ccc; padding-top: 1rem; }
+
+    /* --- PDF bookmarks (WeasyPrint) --- */
+    h2 { bookmark-level: 1; bookmark-state: open; }  /* top-level entries */
+    h3 { bookmark-level: 2; }                        /* optional sub-entries */
+    h1, h4, h5, h6 { bookmark-level: none; }         /* suppress others */
   </style>
 </head>
 <body>
@@ -62,15 +67,30 @@
 
   {# ——— Financial Chart ——— #}
   {% if chart_data %}
-    <div style="margin-top:1.5em;">
-      <h3>Revenue vs Net Income (in USD Billion)</h3>
-      <img src="data:image/png;base64,{{ chart_data }}"
-         alt="Bar chart of revenue vs net income"
-         style="max-width:100%;height:auto;border:1px solid #ccc;"/>
-    </div>
+    <h2>Revenue vs Net Income or Profit (in USD Billion)</h2>
+    <img
+      src="data:image/png;base64,{{ chart_data }}"
+      alt="Latest-year grouped bars"
+      style="max-width:100%;height:auto;border:1px solid #ccc;"
+    />
   {% endif %}
 
-
+  {% if chart_data_all %}
+    <div style="page-break-before: always;"></div>
+    <h2>Revenue & Net Income or Profit — All Years</h2>
+    <img
+      src="data:image/png;base64,{{ chart_data_all }}"
+      alt="All-years line chart"
+      style="max-width:100%;height:auto;border:1px solid #ccc;"
+    />
+  {% endif %}
+  <p style="font-size:12px;color:#666;margin-top:1.5rem;">
+    <em>Data disclaimer:</em> Figures shown are illustrative. Year labels may reflect
+    non-aligned fiscal years across companies, and values may be normalized/rounded.
+    For official results, see the issuer’s audited filings (10-K/10-Q).
+  </p>
+  
+  
   <p><a href="{{ url_for('upload_file') }}">Upload another file</a></p>
 </body>
 </html>

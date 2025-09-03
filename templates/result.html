@@ -45,21 +45,29 @@
       {% endfor %}
     </tbody>
   </table>
+  <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
+    <em>Data disclaimer:</em> This demo uses sample/illustrative figures and may mix
+    calendar-year and fiscal-year periods across companies. Values are simplified
+    and rounded. Do not rely on these numbers for decisions—please consult each
+    company’s latest 10-K/10-Q.
+  </p>
+
 
   {# ——— AI Analysis Section ——— #}
   {% if ai_text %}
     <div class="ai-summary">
       <h3>AI Analysis</h3>
       <p>{{ ai_text }}</p>
-
-      <!-- ↓↓↓ Download PDF form inserted here ↓↓↓ -->
-      <form action="{{ url_for('download_pdf') }}" method="post">
-        <!-- single-quote wrapper so the inner JSON (with its " marks) survives intact -->
-        <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'>
+            
+      <!-- ↓↓↓ Download PDF form inserted here with embedded data ↓↓↓ -->
+      <form id="pdf-form" action="{{ url_for('download_pdf') }}" method="post">
+        <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
         <!-- ai_text is just plain text -->
-        <input type="hidden" name="ai_text" value="{{ ai_text }}">
-        <!-- new: ship the chart PNG as a base64 string -->
+        <input type="hidden" name="ai_text"   value="{{ ai_text }}">
+        <!-- latest-year bars (already there) -->
         <input type="hidden" name="chart_data" value="{{ chart_data }}">
+        <!-- NEW: all-years line chart - ship the chart PNG as a base64 string --> 
+        <input type="hidden" name="chart_data_all" value="{{ chart_data_all or '' }}">
         <button type="submit">Download as PDF</button>
       </form>
     </div>  {# <-- close .ai-summary div #}
@@ -75,29 +83,107 @@
   {# ——— Financial Chart ——— #}
   {% if fig_json %}
     <div style="margin-top:1.5em;">
-      <h3>Revenue vs Net Income — interactive</h3>
+      <h3>Revenue vs Net Income or Profit — interactive</h3>
+
+      <!-- controls: year selector + big download button -->
+      <div style="margin:.75rem 0; display:flex; gap:.75rem; align-items:center;">
+        <label for="year-select"><strong>Year:</strong></label>
+        <select id="year-select"></select>
+
+        <button id="download-png" type="button">Download PNG</button>
+      </div>
+
+      <!-- chart -->
       <div id="plotly-chart" style="width:100%;max-width:1000px;height:420px;"></div>
+      <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
+        <em>Data disclaimer:</em> This demo uses sample/illustrative figures and may mix
+        calendar-year and fiscal-year periods across companies. Values are simplified
+        and rounded. Do not rely on these numbers for decisions—please consult each
+        company’s latest 10-K/10-Q.
+      </p>
     </div>
+
 
     <!-- Plotly CDN (loads once on this page) -->
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
     <script>
       // `fig_json` is a JSON string generated with PlotlyJSONEncoder in Flask.
       // We embed it as a real JS object (no quotes) using `|safe`.
-      const fig = {{ fig_json | safe }};
-      const config = { responsive: true, displaylogo: false };
-      Plotly.newPlot('plotly-chart', fig.data, fig.layout || {}, config);
+      // Data passed from Flask/Jinja
+      const initialFig   = {{ (fig_json or "null")|safe }};
+      const years        = {{ years|tojson }};
+      const figsByYear   = {{ (figs_by_year_json or "{}")|safe }};
+      const figAll       = {{ (fig_all_json or "null")|safe }};
+
+      // Render initial chart
+      if (initialFig) {
+        Plotly.newPlot('plotly-chart', initialFig.data, initialFig.layout || {}, {
+          responsive: true, displaylogo: false
+        });
+      }
+
+      // Populate year selector (include "All years" if available)
+      const yearSel = document.getElementById('year-select');
+      if (figAll) {
+        const opt = document.createElement('option');
+        opt.value = '__ALL__';
+        opt.textContent = 'All years';
+        yearSel.appendChild(opt);
+
+        // NEW: default to All years and render it now
+        yearSel.value = '__ALL__';
+        Plotly.react('plotly-chart', figAll.data, figAll.layout, { responsive: true });
+      }
+
+      // Add the per-year options
+      (years && years.length ? years : []).forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = y;
+        yearSel.appendChild(opt);
+      });
+
+      // If no All-years figure, default to the latest year (matches initial chart)
+      if (!figAll && years && years.length) {
+        yearSel.value = String(years[years.length - 1]);
+      }
+
+      // Swap figure when the selection changes
+      yearSel.addEventListener('change', (e) => {
+        const v = String(e.target.value);
+        if (v === '__ALL__' && figAll) {
+          Plotly.react('plotly-chart', figAll.data, figAll.layout, {responsive: true});
+          return;
+        }
+        const fy = figsByYear[v];
+        if (fy) {
+          Plotly.react('plotly-chart', fy.data, fy.layout, {responsive: true});
+        }
+      });
+
+      // Big "Download PNG" button (in addition to Plotly’s camera icon)
+      document.getElementById('download-png').addEventListener('click', () => {
+        Plotly.downloadImage('plotly-chart', {
+          format: 'png',
+          filename: 'revenue_vs_net_income_or_profit',
+          scale: 2
+        });
+      });
     </script>
 
   {% elif chart_data %}
     {# Fallback to the static PNG if we don't have Plotly JSON #}
     <div style="margin-top:1.5em;">
-      <h3>Revenue vs Net Income (static)</h3>
+      <h3>Revenue vs Net Income or Profit (static)</h3>
       <img
         src="data:image/png;base64,{{ chart_data }}"
-        alt="Bar chart of revenue vs net income"
+        alt="Bar chart of revenue vs net income or profit"
         style="max-width:100%;height:auto;border:1px solid #ccc;"
       />
+      <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
+        <em>Data disclaimer:</em> Sample/illustrative data; year labels can reflect
+        non-aligned fiscal years across companies. Values may be normalized/rounded.
+      </p>
     </div>
   {% endif %}
 
