@@ -76,20 +76,20 @@ def is_allowed_file(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
-def read_zip_first_valid(zip_path: Path) -> pd.DataFrame:
-    """Open the first .csv or .xlsx inside a ZIP and return a DataFrame."""
+def read_zip_concat(zip_path: Path) -> pd.DataFrame:
+    """Concatenate ALL CSV/XLSX files in a ZIP into one DataFrame."""
     with zipfile.ZipFile(zip_path, "r") as zf:
-        members = sorted(
-            [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
-        )
+        members = [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
         if not members:
             raise ValueError("ZIP has no CSV/XLSX files.")
-        name = members[0]
-        with zf.open(name) as fh:
-            if name.lower().endswith(".csv"):
-                return pd.read_csv(fh)
-            # xlsx
-            return pd.read_excel(fh, engine="openpyxl")
+        frames = []
+        for name in sorted(members):
+            with zf.open(name) as fh:
+                if name.lower().endswith(".csv"):
+                    frames.append(pd.read_csv(fh))
+                else:
+                    frames.append(pd.read_excel(fh, engine="openpyxl"))
+        return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def read_anytabular(path: Path) -> pd.DataFrame:
@@ -100,7 +100,7 @@ def read_anytabular(path: Path) -> pd.DataFrame:
     if ext == ".xlsx":
         return pd.read_excel(path, engine="openpyxl")
     if ext == ".zip":
-        return read_zip_first_valid(path)
+        return read_zip_concat(path)  # <- was read_zip_first_valid(path)
     raise ValueError(f"Unsupported file type: {ext}")
 
 
@@ -157,11 +157,87 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     return out, warn
 
 
+def build_plotly_multi_year(clean_df):
+    """Line chart: Revenue & Net income or profit across all years, per company."""
+    df = clean_df.copy()
+
+    li_norm = (
+        df["LineItem"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z]+", " ", regex=True)
+        .str.strip()
+    )
+    df["LI_CANON"] = np.select(
+        [
+            li_norm.str.contains(
+                r"\b(?:net income|net profit|profit)\b", regex=True, na=False
+            ),
+            li_norm.str.contains(
+                r"\b(?:revenue|total revenue|sales|total sales)\b",
+                regex=True,
+                na=False,
+            ),
+        ],
+        ["Net income", "Revenue"],
+        default=df["LineItem"].astype(str),
+    )
+
+    keep = df["LI_CANON"].isin(["Revenue", "Net income"])
+    g = (
+        df[keep]
+        .groupby(["Year", "Company", "LI_CANON"])["Value"]
+        .sum()
+        .reset_index()
+        .sort_values(["Year", "Company", "LI_CANON"])
+    )
+
+    fig = go.Figure()
+    for comp in sorted(pd.unique(g["Company"])):
+        sub_rev = g[(g["Company"] == comp) & (g["LI_CANON"] == "Revenue")]
+        sub_ni = g[(g["Company"] == comp) & (g["LI_CANON"] == "Net income")]
+
+        fig.add_scatter(
+            name=f"{comp} — Revenue",
+            x=sub_rev["Year"],
+            y=sub_rev["Value"],
+            mode="lines+markers",
+        )
+        fig.add_scatter(
+            name=f"{comp} — Net income",
+            x=sub_ni["Year"],
+            y=sub_ni["Value"],
+            mode="lines+markers",
+            line=dict(dash="dot"),
+        )
+    fig.update_layout(
+        title=dict(
+            text="Revenue & Net Income or Profit — All Years", x=0.5, xanchor="center"
+        ),
+        xaxis_title="Year",
+        yaxis_title="Value",
+        hovermode="x unified",
+        margin=dict(l=60, r=30, t=70, b=120),  # more bottom space for legend
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.18,  # place legend below chart
+            xanchor="center",
+            x=0.5,
+            traceorder="grouped",
+            font=dict(size=11),
+            itemwidth=50,
+        ),
+    )
+    fig.update_yaxes(tickformat="~s")
+    # default the selector to "All Years"; otherwise figAll would be null
+    return fig
+
+
+# --- Interactive Plotly figure for the page (latest year) ---
 def build_plotly_chart(clean_df, latest_year=None):
-    """
-    Returns a Plotly figure: grouped bars of Revenue vs Net income
-    for each Company in the selected/latest Year.
-    Expects canonical columns: Company | Year | LineItem | Value
+    """Grouped bars of Revenue vs Net income (or profit) for the selected/latest Year.
+    Expects canonical columns: Company | Year | LineItem | Value.
     """
     df = clean_df.copy()
 
@@ -174,6 +250,7 @@ def build_plotly_chart(clean_df, latest_year=None):
         latest_year = None
 
     # ------ NEW: canonicalize LineItem values ------------------------
+
     li_norm = (
         df["LineItem"]
         .astype(str)
@@ -184,39 +261,46 @@ def build_plotly_chart(clean_df, latest_year=None):
 
     df["LI_CANON"] = np.select(
         [
-            li_norm.str.contains(r"\b(net income|net profit|profit)\b"),
-            li_norm.str.contains(r"\b(revenue|total revenue|sales|total sales)\b"),
+            li_norm.str.contains(
+                r"\b(?:net income|net profit|profit)\b", regex=True, na=False
+            ),
+            li_norm.str.contains(
+                r"\b(?:revenue|total revenue|sales|total sales)\b", regex=True, na=False
+            ),
         ],
         ["Net income", "Revenue"],
         default=df["LineItem"].astype(str),
     )
 
-    # --- Build pivot on the canonical names build traces --------------
-    print("Line items seen:", sorted(df["LI_CANON"].unique()))
+    # --- Build pivot for grouped bars, on the canonical names build traces -----------
+    # print("Line items seen:", sorted(df["LI_CANON"].unique()))
 
-    need = df["LI_CANON"].isin(["Revenue", "Net income"])
     pivot = (
-        df[need]
+        df[df["LI_CANON"].isin(["Revenue", "Net income"])]
         .pivot_table(index="Company", columns="LI_CANON", values="Value", aggfunc="sum")
         .fillna(0.0)
         .sort_index()
     )
 
     fig = go.Figure()
-    # x_vals = pivot.index.astype(str).tolist()
 
     if "Revenue" in pivot.columns:
-        fig.add_bar(name="Revenue", x=pivot.index.tolist(), y=pivot["Revenue"].tolist())
-
+        fig.add_bar(
+            name="Revenue",
+            x=pivot.index.tolist(),
+            y=pivot["Revenue"].tolist(),
+        )
     if "Net income" in pivot.columns:
         fig.add_bar(
-            name="Net income", x=pivot.index.tolist(), y=pivot["Net income"].tolist()
+            name="Net income",
+            x=pivot.index.tolist(),
+            y=pivot["Net income"].tolist(),
         )
 
     title_year = f" — {latest_year}" if latest_year is not None else ""
     fig.update_layout(
         barmode="group",
-        title=f"Revenue vs Net income{title_year}",
+        title=f"Revenue vs Net income or Profit{title_year}",
         xaxis_title="Company",
         yaxis_title="Value",
         margin=dict(l=40, r=20, t=60, b=40),
@@ -283,7 +367,8 @@ def build_matplotlib_grouped(clean_df, latest_year=None):
     ax.set_xticks(x)
     ax.set_xticklabels(companies, rotation=25, ha="right")
     title_year = f" — {latest_year}" if latest_year is not None else ""
-    ax.set_title(f"Revenue vs Net income{title_year}")
+
+    ax.set_title(f"Revenue vs Net income or Profit{title_year}")  # ← change this
     ax.set_ylabel("Value")
     ax.legend(loc="upper right")
     fig.tight_layout()
@@ -375,19 +460,63 @@ def upload_file():
     needed = {"Company", "Year", "LineItem", "Value"}
     use_df = df_norm if needed.issubset(set(df_norm.columns)) else raw_df
 
-    df = use_df.head(10)
-    summary = df.to_dict(orient="records")
+    # Debug: see which years your data has
+    if "Year" in use_df.columns:
+        years_debug = sorted(int(v) for v in pd.unique(use_df["Year"].dropna()))
+        app.logger.info("Years found: %s", years_debug)
+    else:
+        app.logger.info("Years found: <none> (no 'Year' column)")
 
-    # --- Build prompt for AI --------
-    prompt_lines = [
-        f"{r['Company']} {r['Year']} {r['LineItem']}: {r['Value']:,}"
-        for r in summary
-        if all(k in r for k in ("Company", "Year", "LineItem", "Value"))
-    ]
+    # show ALL rows, neatly ordered
+    summary_df = use_df.copy().sort_values(
+        ["Company", "Year", "LineItem"], na_position="last"
+    )
+    summary = summary_df.to_dict(orient="records")
+
+    # Build compact multi-year lines for AI (only Revenue & Net income)
+    li_norm_ai = (
+        use_df["LineItem"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z]+", " ", regex=True)
+        .str.strip()
+    )
+
+    ai_df = use_df.assign(
+        LI_CANON=np.select(
+            [
+                li_norm_ai.str.contains(
+                    r"\b(?:net income|net profit|profit)\b", regex=True, na=False
+                ),
+                li_norm_ai.str.contains(
+                    r"\b(?:revenue|total revenue|sales|total sales)\b",
+                    regex=True,
+                    na=False,
+                ),
+            ],
+            ["Net income", "Revenue"],
+            default=use_df["LineItem"].astype(str),
+        )
+    )
+
+    ai_df = (
+        ai_df[ai_df["LI_CANON"].isin(["Revenue", "Net income"])]
+        .groupby(["Company", "Year", "LI_CANON"], dropna=True)["Value"]
+        .sum()
+        .reset_index()
+        .sort_values(["Company", "Year", "LI_CANON"])
+    )
+
+    lines = []
+    for (comp, yr), grp in ai_df.groupby(["Company", "Year"]):
+        rev = grp.loc[grp["LI_CANON"] == "Revenue", "Value"].sum()
+        ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
+        lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
+
     prompt = (
-        "Here is a snippet of financial data:\n"
-        + "\n".join(prompt_lines)
-        + "\n\nPlease provide a concise, 2-3 sentence analysis of these figures."
+        "Summarize multi-year performance in 3–5 sentences. "
+        "Focus on growth/decline and rough margins across years; do not invent data.\n"
+        + "\n".join(lines)
     )
 
     # --- Call AI ---------------------
@@ -408,6 +537,46 @@ def upload_file():
     # Build interactive Plotly chart + PNG snapshot for PDF (Matplotlib fallback)
     # fig_json must always be defined (None means "no interactive chart")
     fig_json = None  # <-- KEY: ensure defined for all paths
+
+    # NEW: always-defined defaults for the template
+    years = []
+    figs_by_year_json = "{}"
+    fig_all_json = "null"
+    chart_data_all = None  # <-- NEW
+
+    if "Year" in use_df.columns and use_df["Year"].notna().any():
+        fig_all = build_plotly_multi_year(use_df)
+        fig_all_json = json.dumps(fig_all, cls=PlotlyJSONEncoder)
+
+        # NEW: PNG for the PDF
+        try:
+            chart_data_all = base64.b64encode(
+                fig_all.to_image(format="png", scale=2)  # needs kaleido
+            ).decode("ascii")
+        except Exception as e:
+            app.logger.warning("Plotly->PNG failed (all years): %s", e)
+            chart_data_all = None
+
+    # Use the normalized dataframe (clean_df) for the chart:
+    has_canonical = {"Company", "Year", "LineItem", "Value"}.issubset(use_df.columns)
+
+    if has_canonical:
+        # 1) Interactive Plotly figure for the page (latest year)   # noqa: E501                                                             r)
+        fig = build_plotly_chart(use_df)
+        fig_json = json.dumps(fig, cls=PlotlyJSONEncoder)  # pass to template
+
+        # NEW — Build “year -> figure” map so the UI can switch years instantly
+        if "Year" in use_df.columns and use_df["Year"].notna().any():
+            years = sorted(int(v) for v in pd.unique(use_df["Year"].dropna()))
+            if years:
+                figs_by_year = {}
+                for y in years:
+                    fy = build_plotly_chart(use_df, latest_year=int(y))
+                    # store as plain dicts so Jinja can embed them directly
+                    figs_by_year[str(y)] = json.loads(
+                        json.dumps(fy, cls=PlotlyJSONEncoder)
+                    )
+                figs_by_year_json = json.dumps(figs_by_year)
 
     # Use the normalized dataframe (clean_df) for the chart:
     has_canonical = {"Company", "Year", "LineItem", "Value"}.issubset(use_df.columns)
@@ -439,8 +608,12 @@ def upload_file():
         "result.html",
         summary=summary,
         ai_text=ai_text,
-        chart_data=chart_data,  # base64 PNG for PDF
+        chart_data=chart_data,  # base64 PNG for PDF (latest-year bars)
         fig_json=fig_json,  # None => template falls back to PNG <-- NEW
+        years=years,  # NEW
+        figs_by_year_json=figs_by_year_json,  # NEW
+        fig_all_json=fig_all_json,  # <-- NEW
+        chart_data_all=chart_data_all,  # <-- NEW
     )
 
 
@@ -486,14 +659,18 @@ def download_pdf():
     # 1) recover the posted JSON‑encoded context
     summary = json.loads(request.form["summary"])
     ai_text = request.form["ai_text"]
-    chart_data = request.form.get("chart_data")  # ← grab our new hidden field
 
-    # 2) render out the PDF template
+    # NEW: ← grab both chart images from the form (latest-year bars)
+    chart_data = request.form.get("chart_data")
+    chart_data_all = request.form.get("chart_data_all")
+
+    # 2) render out the PDF template with BOTH images
     html_out = render_template(
         "pdf.html",
         summary=summary,
         ai_text=ai_text,
         chart_data=chart_data,  # ← send it into the PDF template
+        chart_data_all=chart_data_all,  # <-- NEW
     )
 
     # 3) ask WeasyPrint to turn that into a PDF
@@ -502,7 +679,7 @@ def download_pdf():
     pdf_bytes = HTML(
         string=html_out,
         base_url=request.url_root,
-    ).write_pdf(outline=False)
+    ).write_pdf()
 
     # 4) return the bytes as a downloadable file
     return send_file(

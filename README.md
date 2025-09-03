@@ -65,12 +65,16 @@ Features
             ```bash
              plotly_get_chrome
      - ✅   “this is what the output looks like” with short narrative - AI analysis:
+
+             ![Sample PDF report (page 1)](static/report_preview.png)
+
             ![Sample PDF report (page 1)](static/report_preview.png)
             **To Note:**
             • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
             • Some of 2024 lines appear to be calendar-year or a later fiscal year instead of each company’s FY2024.
             • One Apple row (“Shareholders’ Equity $75B”) seems copied from an earlier year; Apple shows negative equity in FY2024 due to buybacks. 
               [annualreports.com]
+
         
   
 8.   **Samples**
