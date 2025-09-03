@@ -301,7 +301,6 @@ def build_plotly_chart(clean_df, latest_year=None):
     fig.update_layout(
         barmode="group",
         title=f"Revenue vs Net income or Profit{title_year}",
-        title=f"Revenue vs Net income{title_year}",
         xaxis_title="Company",
         yaxis_title="Value",
         margin=dict(l=40, r=20, t=60, b=40),
@@ -370,9 +369,6 @@ def build_matplotlib_grouped(clean_df, latest_year=None):
     title_year = f" — {latest_year}" if latest_year is not None else ""
 
     ax.set_title(f"Revenue vs Net income or Profit{title_year}")  # ← change this
-
-    ax.set_title(f"Revenue vs Net income{title_year}")
-
     ax.set_ylabel("Value")
     ax.legend(loc="upper right")
     fig.tight_layout()
