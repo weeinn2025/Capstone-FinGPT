@@ -81,6 +81,7 @@
     </p>
   {% endif %}
 
+  
   {# ——— Financial Chart ——— #}
   {% if fig_json %}
     <section style="margin-top:1.5em;">
@@ -110,12 +111,13 @@
     <script>
       // `fig_json` is a JSON string generated with PlotlyJSONEncoder in Flask.
       // We embed it as a real JS object (no quotes) using `|safe`.
-    
+
       // Data passed from Flask/Jinja
       const initialFig   = {{ (fig_json or "null")|safe }};
       const years        = {{ years|tojson }};
       const figsByYear   = {{ (figs_by_year_json or "{}")|safe }};
       const figAll       = {{ (fig_all_json or "null")|safe }};
+
 
       // If we have "All years", render that by default; otherwise render the latest-year figure.
       if (figAll) {
@@ -125,6 +127,7 @@
         Plotly.newPlot('plotly-chart', initialFig.data, initialFig.layout || {}, {
           responsive: true, displaylogo: false });
       }
+    
       
       // Populate year selector (include "All years" if available)
       const yearSel = document.getElementById('year-select');
@@ -133,6 +136,7 @@
         opt.value = '__ALL__';
         opt.textContent = 'All years';
         yearSel.appendChild(opt);
+
         
         // NEW: default to All years and render it now
         yearSel.value = '__ALL__';
