@@ -157,7 +157,6 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     return out, warn
 
 
-
 def build_plotly_multi_year(clean_df):
     """Line chart: Revenue & Net income or profit across all years, per company."""
     df = clean_df.copy()
@@ -231,19 +230,14 @@ def build_plotly_multi_year(clean_df):
         ),
     )
     fig.update_yaxes(tickformat="~s")
-    return fig  # ← ADD THIS LINE TO DEFAULT THE SELECTOR TO ALL YEARS; otherwise figAll will be null  #noqa: E501
+    # default the selector to "All Years"; otherwise figAll would be null
+    return fig
 
 
+# --- Interactive Plotly figure for the page (latest year) ---
 def build_plotly_chart(clean_df, latest_year=None):
-    """
-    Grouped bars of Revenue vs Net income (or profit) for the selected/latest Year.
-
-def build_plotly_chart(clean_df, latest_year=None):
-    """
-    Returns a Plotly figure: grouped bars of Revenue vs Net income
-    for each Company in the selected/latest Year.
-
-    Expects canonical columns: Company | Year | LineItem | Value
+    """Grouped bars of Revenue vs Net income (or profit) for the selected/latest Year.
+    Expects canonical columns: Company | Year | LineItem | Value.
     """
     df = clean_df.copy()
 
@@ -254,9 +248,6 @@ def build_plotly_chart(clean_df, latest_year=None):
         df = df[df["Year"] == latest_year]
     else:
         latest_year = None
-
-
-    # Canonicalize line items
 
     # ------ NEW: canonicalize LineItem values ------------------------
 
@@ -270,32 +261,22 @@ def build_plotly_chart(clean_df, latest_year=None):
 
     df["LI_CANON"] = np.select(
         [
-
             li_norm.str.contains(
                 r"\b(?:net income|net profit|profit)\b", regex=True, na=False
             ),
             li_norm.str.contains(
                 r"\b(?:revenue|total revenue|sales|total sales)\b", regex=True, na=False
             ),
-
-            li_norm.str.contains(r"\b(net income|net profit|profit)\b"),
-            li_norm.str.contains(r"\b(revenue|total revenue|sales|total sales)\b"),
-
         ],
         ["Net income", "Revenue"],
         default=df["LineItem"].astype(str),
     )
 
+    # --- Build pivot for grouped bars, on the canonical names build traces -----------
+    # print("Line items seen:", sorted(df["LI_CANON"].unique()))
 
-    # Build pivot for grouped bars
-
-    # --- Build pivot on the canonical names build traces --------------
-    print("Line items seen:", sorted(df["LI_CANON"].unique()))
-
-
-    need = df["LI_CANON"].isin(["Revenue", "Net income"])
     pivot = (
-        df[need]
+        df[df["LI_CANON"].isin(["Revenue", "Net income"])]
         .pivot_table(index="Company", columns="LI_CANON", values="Value", aggfunc="sum")
         .fillna(0.0)
         .sort_index()
@@ -303,30 +284,24 @@ def build_plotly_chart(clean_df, latest_year=None):
 
     fig = go.Figure()
 
-
-    # x_vals = pivot.index.astype(str).tolist()
-
-
     if "Revenue" in pivot.columns:
-        fig.add_bar(name="Revenue", x=pivot.index.tolist(), y=pivot["Revenue"].tolist())
-
+        fig.add_bar(
+            name="Revenue",
+            x=pivot.index.tolist(),
+            y=pivot["Revenue"].tolist(),
+        )
     if "Net income" in pivot.columns:
         fig.add_bar(
-            name="Net income", x=pivot.index.tolist(), y=pivot["Net income"].tolist()
-
-        )  # noqa: E501
-
+            name="Net income",
+            x=pivot.index.tolist(),
+            y=pivot["Net income"].tolist(),
         )
-
 
     title_year = f" — {latest_year}" if latest_year is not None else ""
     fig.update_layout(
         barmode="group",
-
         title=f"Revenue vs Net income or Profit{title_year}",
-
         title=f"Revenue vs Net income{title_year}",
-
         xaxis_title="Company",
         yaxis_title="Value",
         margin=dict(l=40, r=20, t=60, b=40),
@@ -567,7 +542,6 @@ def upload_file():
     # fig_json must always be defined (None means "no interactive chart")
     fig_json = None  # <-- KEY: ensure defined for all paths
 
-
     # NEW: always-defined defaults for the template
     years = []
     figs_by_year_json = "{}"
@@ -608,7 +582,6 @@ def upload_file():
                     )
                 figs_by_year_json = json.dumps(figs_by_year)
 
-
     # Use the normalized dataframe (clean_df) for the chart:
     has_canonical = {"Company", "Year", "LineItem", "Value"}.issubset(use_df.columns)
 
@@ -616,7 +589,6 @@ def upload_file():
         # 1) Interactive Plotly figure for the page
         fig = build_plotly_chart(use_df)
         fig_json = json.dumps(fig, cls=PlotlyJSONEncoder)  # pass to template
-
 
         # 2) Try to produce a PNG for the PDF using Kaleido
         try:
@@ -640,17 +612,14 @@ def upload_file():
         "result.html",
         summary=summary,
         ai_text=ai_text,
-
         chart_data=chart_data,  # base64 PNG for PDF - latest-year bars (already there)
         fig_json=fig_json,  # None => template falls back to PNG <-- NEW
         years=years,  # NEW
         figs_by_year_json=figs_by_year_json,  # NEW
         fig_all_json=fig_all_json,  # <-- NEW
         chart_data_all=chart_data_all,  # <-- NEW
-
         chart_data=chart_data,  # base64 PNG for PDF
         fig_json=fig_json,  # None => template falls back to PNG <-- NEW
-
     )
 
 
