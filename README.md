@@ -70,15 +70,17 @@ Features
  
 ### 📊 Interactive Charts & PDF Export  
 
- - Upload → Normalize → AI Analysis → Chart → PDF Download  
- - Live screenshots from the Render demo:
+- Upload → Normalize → AI Analysis → Chart → PDF Download  
+- Live screenshots from the Render demo:
 
-*Multi-Year Revenue & Net Income (interactive PNG export):**  
-![Revenue vs Net Income](static/screenshots/chart.png)
+**Revenue & Net Income (Chart 1 – Multi-Year Line Graph):**  
+![Revenue vs Net Income (Line)](static/screenshots/chart1.png)
+
+**Revenue & Net Income (Chart 2 – Latest Year Bar Graph):**  
+![Revenue vs Net Income (Bar)](static/screenshots/chart2.png)
 
 **Generated PDF Report (includes table, AI analysis & chart):**  
 [📄 Download Sample PDF](static/screenshots/report.pdf)
-
 
 **To Note:**
 • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
