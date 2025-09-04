@@ -67,22 +67,24 @@ Features
              plotly_get_chrome
      - ✅   “This is what the output looks like” with short narrative - AI analysis:
 
-             ### 📊 Interactive Charts & PDF Export  
+ 
+### 📊 Interactive Charts & PDF Export  
 
-             - Upload → Normalize → AI Analysis → Chart → PDF Download  
-             - Live screenshots from the Render demo:
+ - Upload → Normalize → AI Analysis → Chart → PDF Download  
+ - Live screenshots from the Render demo:
 
-             **Multi-Year Revenue & Net Income (interactive PNG export):**
-             ![Revenue vs Net Income](static/screenshots/chart.png)
+*Multi-Year Revenue & Net Income (interactive PNG export):**  
+![Revenue vs Net Income](static/screenshots/chart.png)
 
-             **Generated PDF Report (includes table, AI analysis & chart):**
-             [📄 Download Sample PDF](static/screenshots/report.pdf)
-   
-            **To Note:**
-            • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
-            • Some of 2024 lines appear to be calendar-year or a later fiscal year instead of each company’s FY2024.
-            • One Apple row (“Shareholders’ Equity $75B”) seems copied from an earlier year; Apple shows negative equity in FY2024 due to buybacks. 
-              [annualreports.com]
+**Generated PDF Report (includes table, AI analysis & chart):**  
+[📄 Download Sample PDF](static/screenshots/report.pdf)
+
+
+**To Note:**
+• Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
+• Some of 2024 lines appear to be calendar-year or a later fiscal year instead of each company’s FY2024.
+• One Apple row (“Shareholders’ Equity $75B”) seems copied from an earlier year; Apple shows negative equity in FY2024 due to buybacks. 
+[annualreports.com]
       
   
 8.   **Samples included**
