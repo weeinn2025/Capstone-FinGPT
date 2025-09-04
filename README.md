@@ -35,27 +35,27 @@ Features
      - ✅   support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
      - ✅   Try the samples:   `sample_financials_2020_2024_xlsx` (for multi-company all-years line gragh), `sample_companies_2024.csv` (for multi-company grouped bars), `sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
 
-3.   **Preview before analysis**
+2.   **Preview before analysis**
      - ✅   see the **first 10 rows** on a `/preview` screen before analysis, then click **Analyze this file**.
 
-4.   **Best-effort normalization**
+3.   **Best-effort normalization**
      - ✅   Canonical schema (columns): Company | Year | LineItem | Value
      - ✅   `Company | Year | LineItem | Value` (trims headers, coerces numbers, drops blank rows; falls back to raw columns if mapping fails).
      - ✅   Trims headers, coerces numbers, drops blank rows.
      - ✅   Falls back to raw columns if mapping fails.
  
-5.   **AI summary**
+4.   **AI summary**
      - ✅   generates a concise 2–3 sentence narrative via **Gemini** when `GEMINI_*` env vars are set.
      - ✅   app works without AI keys too, shows a friendly “AI disabled” note, and renders summary, chart, and PDF.
 
-6.   **Interactive charts (Plotly) - dashboard**
+5.   **Interactive charts (Plotly) - dashboard**
      - ✅   grouped bars of **Revenue** vs **Net income** for the **latest year**.
      - ✅   Canonicalizes line items so common names map correctly - Synonym mapping (≈):
      -       *  Revenue: “revenue”, “total revenue”, “sales”, “total sales”
      -       *  Net income: “net income”, “net profit”, “profit”
      - ✅   If Plotly JSON is not present, the page falls back to a static PNG.
 
-7.   **PDF export report - Data + Chart + AI analysis**
+6.   **PDF export report - Data + Chart + AI analysis**
      - ✅   Includes data table, AI text, and the **same chart** as an image.  
      - ✅   Primary path: Plotly **via Kaleido → PNG → PDF**.  
      - ✅   Fallback: **Matplotlib grouped bars** (no Chrome/Kaleido required).
@@ -88,16 +88,17 @@ Features
 • One Apple row (“Shareholders’ Equity $75B”) seems copied from an earlier year; Apple shows negative equity in FY2024 due to buybacks. 
 [annualreports.com]
       
+
   
-8.   **Samples included**
+7.   **Samples included**
      - ✅   Located in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
 
-9.   **Safety**
+8.   **Safety**
      - ✅   `GET /` (home page) is **not** rate-limited;  
      - ✅   `POST /preview` and `POST /upload` are limited to **10 requests per minute** (demo safety).
      - ✅   For production → configure a shared store or use Redis/Memcached with Flask-Limiter.  
 
-10.  **Clear error messages** for unreadable or invalid files.
+9.  **Clear error messages** for unreadable or invalid files.
 
 
 How it flows
