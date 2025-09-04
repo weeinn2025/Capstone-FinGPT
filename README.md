@@ -1,7 +1,7 @@
 Capstone‑FinGPT
 ===============
 
-A lightweight Flask app to ingest financial statements, preview/clean them, generate a concise AI-powered analysis + chart, and download a PDF report.
+A lightweight Flask web app to ingest financial statements, preview and clean them, generate a concise AI-powered analysis + charts, and download a PDF report.
 
 🚀 Live demo
 
@@ -16,11 +16,11 @@ Render deployment notes:
 
 https://github.com/weeinn2025/Capstone-FinGPT
 
-> **Disclaimer**
+> ⚠️**Disclaimer**
 > The sample dataset in this repository is illustrative and may mix calendar and
 > fiscal years because companies have different year-ends (e.g., Apple ≈ late Sep,
-> Microsoft ≈ Jun 30, NVIDIA ≈ late Jan). Values are simplified/rounded and may not
-> match any single audited filing. Do not use for investment decisions. Always verify
+> Microsoft ≈ Jun 30, NVIDIA ≈ late Jan). Values are simplified or rounded and may not
+> match audited filings. Do not use for investment decisions. Always verify
 > against the company’s latest 10-K/10-Q or annual report.
 
 
@@ -33,57 +33,65 @@ Features
      - ✅   support **.xlsx**  (via `pandas` + `openpyxl`- same logical columns; multiple sheets are supported (first sheet is read by default))
      - ✅   support **.csv**   (header row required, example: Company,Year,LineItem,Value)
      - ✅   support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
-     - ✅   Try the samples:   `sample_companies_2024.csv` (for multi-company grouped bars) ,`sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
+     - ✅   Try the samples:   `sample_financials_2020_2024_xlsx` (for multi-company all-years line gragh), `sample_companies_2024.csv` (for multi-company grouped bars), `sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
 
 3.   **Preview before analysis**
      - ✅   see the **first 10 rows** on a `/preview` screen before analysis, then click **Analyze this file**.
 
 4.   **Best-effort normalization**
-     - ✅   to canonical schema (columns):  
+     - ✅   Canonical schema (columns): Company | Year | LineItem | Value
      - ✅   `Company | Year | LineItem | Value` (trims headers, coerces numbers, drops blank rows; falls back to raw columns if mapping fails).
+     - ✅   Trims headers, coerces numbers, drops blank rows.
+     - ✅   Falls back to raw columns if mapping fails.
  
 5.   **AI summary**
      - ✅   generates a concise 2–3 sentence narrative via **Gemini** when `GEMINI_*` env vars are set.
      - ✅   app works without AI keys too, shows a friendly “AI disabled” note, and renders summary, chart, and PDF.
 
-6.   **Interactive chart - dashboard (P0-2)**
+6.   **Interactive charts (Plotly) - dashboard**
      - ✅   grouped bars of **Revenue** vs **Net income** for the **latest year**.
-     - ✅   Canonicalizes line items so common names map correctly:
+     - ✅   Canonicalizes line items so common names map correctly - Synonym mapping (≈):
      -       *  Revenue: “revenue”, “total revenue”, “sales”, “total sales”
      -       *  Net income: “net income”, “net profit”, “profit”
-     - ✅   Synonyms handled: `Revenue/Total Revenue/Sales`, `Net income/Net Profit/Profit`
-     - ✅   If Plotly JSON isn’t present, the page falls back to a static PNG.
+     - ✅   If Plotly JSON is not present, the page falls back to a static PNG.
 
-7.   **PDF export - Chart + report**
-     - ✅   includes data table, AI text, and the **same chart** as an image.  
-     - ✅   Primary path: Plotly **Kaleido → PNG**.  
+7.   **PDF export report - Data + Chart + AI analysis**
+     - ✅   Includes data table, AI text, and the **same chart** as an image.  
+     - ✅   Primary path: Plotly **via Kaleido → PNG → PDF**.  
      - ✅   Fallback: **Matplotlib grouped bars** (no Chrome/Kaleido required).
-     - ✅   renders a bar chart and lets you **download a nicely formatted PDF**.
-     - ✅   The Download as PDF button renders the data + AI text and embeds the same chart as a PNG.
+     - ✅   Renders a bar chart and lets you **download a nicely formatted PDF**.
+     - ✅   One-click Download as PDF renders the data + AI text and embeds the same chart as a PNG.
      - ✅   If Kaleido is unavailable, export still works via a Matplotlib grouped snapshot.
      - ✅   To enable Plotly → PNG locally, install Chrome once:
             ```bash
              plotly_get_chrome
-     - ✅   “this is what the output looks like” with short narrative - AI analysis:
+     - ✅   “This is what the output looks like” with short narrative - AI analysis:
 
-             ![Sample PDF report (page 1)](static/report_preview.png)
+             ### 📊 Interactive Charts & PDF Export  
 
-            ![Sample PDF report (page 1)](static/report_preview.png)
+             - Upload → Normalize → AI Analysis → Chart → PDF Download  
+             - Live screenshots from the Render demo:
+
+             **Multi-Year Revenue & Net Income (interactive PNG export):**
+             ![Revenue vs Net Income](static/screenshots/chart.png)
+
+             **Generated PDF Report (includes table, AI analysis & chart):**
+             [📄 Download Sample PDF](static/screenshots/report.pdf)
+   
             **To Note:**
             • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
             • Some of 2024 lines appear to be calendar-year or a later fiscal year instead of each company’s FY2024.
             • One Apple row (“Shareholders’ Equity $75B”) seems copied from an earlier year; Apple shows negative equity in FY2024 due to buybacks. 
               [annualreports.com]
-
-        
+      
   
-8.   **Samples**
-     - ✅   in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
+8.   **Samples included**
+     - ✅   Located in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
 
 9.   **Safety**
      - ✅   `GET /` (home page) is **not** rate-limited;  
      - ✅   `POST /preview` and `POST /upload` are limited to **10 requests per minute** (demo safety).
-     - ✅   For production, configure a shared store (Redis, Memcached) per Flask-Limiter docs.  
+     - ✅   For production → configure a shared store or use Redis/Memcached with Flask-Limiter.  
 
 10.  **Clear error messages** for unreadable or invalid files.
 
@@ -98,7 +106,7 @@ graph LR
 A[Upload CSV/XLSX/ZIP] --> B[Read + Normalize]
 B --> C[Preview table]
 B --> D[AI summary (Gemini)]
-B --> E[Plotly grouped bars (latest year)]
+B --> E[Plotly interactive charts/grouped bars (latest year)]
 E --> F[PNG snapshot via Kaleido]
 F --> G[PDF export (WeasyPrint)]
 
@@ -121,7 +129,7 @@ Local Setup
      git clone https://github.com/weeinn2025/Capstone-FinGPT.git
      cd Capstone-FinGPT
 
-2.   Create & activate the environment
+2.   Create and activate the environment
 
      conda create -n ml python=3.11
      conda activate ml
@@ -153,7 +161,7 @@ Local Setup
 6.   Then Run locally:
      flask run or python app.py
 
-     Visit http://127.0.0.1:5000
+     # Visit http://127.0.0.1:5000
 
 
 Using the app
@@ -166,7 +174,7 @@ Using the app
 3.   Click Analyze this file to:
      -  show a normalized summary table.
      -  generate AI analysis/text (if env is set), and the interactive chart.
-     -  render a bar chart.
+     -  render a bar chart, line graph
 
 4.   You are able to click Download as PDF to save the report.
 
@@ -199,7 +207,6 @@ Testing & linting
 (Works the same in macOS/Linux terminals and Windows PowerShell.)
 
 
-
 Deployment
 ==========
 
@@ -218,8 +225,8 @@ Troubleshooting
 ✅   Blank interactive chart:
      *  confirm at least one year has both Revenue and Net income (synonyms above).
 
-✅   PDF uses Matplotlib:
-     *  install Chrome via plotly_get_chrome (optional).
+✅   PDF uses Matplotlib, if Kaleido not available:
+     *  install Chrome via plotly_get_chrome (optional).    
 
 ✅   ZIPs not in Git:
      *  ZIPs are ignored globally but allowed in samples/ (see .gitignore).
@@ -245,6 +252,8 @@ Capstone-FinGPT/
 │  ├─ result.html         # interactive Plotly (or static fallback)
 │  └─ pdf.html            # WeasyPrint layout for PDF
 ├─ samples/
+|  ├─ sample_financials_2020_2024.csv_only.zip
+|  ├─ sample_financials_2020_2024.xlsx.zip
 │  ├─ sample_companies_2024.csv
 │  ├─ sample_income_statement.csv
 │  ├─ sample_income_statement.xlsx
@@ -253,7 +262,10 @@ Capstone-FinGPT/
 │  └─ sample_xlsx_only.zip
 ├─ uploads/               # user uploads at runtime (gitignored)
 │  └─ .gitkeep
-├─ static/                # optional assets (logos/CSS/JS)
+├─ static/screenshots     # optional assets (logos/CSS/JS)
+|  ├─ chart.png
+|  ├─ pdf_sample.png
+│  ├─ pdf_report.pdf
 ├─ tests/                 # add unit tests here
 │  └─ (placeholder)
 └─ .github/workflows/
@@ -261,6 +273,5 @@ Capstone-FinGPT/
 
 
 License
-
 MIT © 2025
 
