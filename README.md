@@ -79,7 +79,11 @@ Features
 **Revenue & Net Income (Chart 2 – Latest Year Bar Graph):**  
 ![Revenue vs Net Income (Bar)](static/screenshots/chart2.png)
 
-**Generated PDF Report (includes table, AI analysis & chart):**  
+**Generated PDF Report (includes table, AI analysis & chart):**
+
+Preview (first page):  
+![Sample PDF Report (Preview)](static/report_preview.png)  
+
 [📄 Download Sample PDF](static/screenshots/report.pdf)
 
 **To Note:**
