@@ -107,7 +107,7 @@ Features
 **Generated PDF Report (includes table, AI analysis & chart):**
 
 Preview (first page):  
-![Sample PDF Report (Preview)](static/report_preview.png)  
+![Sample PDF Report (Preview)](static/screenshots/report_preview.png)  
 
 [📄 Download Sample PDF](static/screenshots/report_ai_analysis.pdf)
 
