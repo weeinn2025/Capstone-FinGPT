@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>AI Financial Summary</title>
   <style>
+    /* base table for the CSV summary at the top */
     table { border-collapse: collapse; width: 80%; }
     th, td { padding: 8px; border: 1px solid #ccc; text-align: right; }
     th { background: #f2f2f2; }
@@ -13,6 +15,50 @@
     h2 { bookmark-level: 1; bookmark-state: open; }  /* top-level entries */
     h3 { bookmark-level: 2; }                        /* optional sub-entries */
     h1, h4, h5, h6 { bookmark-level: none; }         /* suppress others */
+  
+   
+    /* ===== Page rules (one set only) ===== */
+    /* Default pages: portrait */
+    /* --- page sizing for WeasyPrint --- */
+    @page { size: A4 portrait; margin: 18mm; }         
+
+    /* Named page for wide content or wide page */
+    @page wide { size: A4 landscape; margin: 15mm; }   
+
+
+    /* utilities */
+    .page-cut { break-after: page; }  /* force a page break after this block */     
+
+    /* Utility: to start on a new wide page */
+    .landscape-page { page: wide; break-before: page; }           /* start new wide page */
+    .landscape-page, .landscape-page * { break-inside: avoid; }   /* keep big blocks tidy */
+
+    /* --- Metrics table for Tier-1 (tighter table + fixed layout so it fits) --- */
+    .metrics-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .metrics-table th, .metrics-table td { border: 1px solid #999; padding: 4px; text-align: right; font-size: 11px; }
+    .metrics-table th { background: #efefef; }
+    .metrics-table td.money { white-space:nowrap; text-align:right; }
+    .metrics-table td.left, .metrics-table th.left { text-align: left; }
+
+    /* Make money columns wider so long numbers fit cleanly */
+    .col-revenue  { width: 22ch; }   /* tweak up/down if needed */
+    .col-netinc   { width: 22ch; }
+
+    /* Alert dots */
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; vertical-align:middle; }
+    .dot.green { background:#16a34a; }
+    .dot.red   { background:#dc2626; }
+    .dot.gray  { background:#9ca3af; }
+
+    /* legend spacing (so buttons/other content never crowd it) */
+    .legend { margin: 8px 0 14px; font-size:12px; color:#333; }
+    .legend .dot { width:8px; height:8px; margin:0 .25rem 0 .5rem; }
+
+    /* Wide (landscape) last page */
+    @page { size: A4 portrait; margin: 18mm; }
+    @page wide { size: A4 landscape; margin: 15mm; }
+    .landscape-page { page: wide; break-before: page; }
+    .landscape-page, .landscape-page * { break-inside: avoid; }
   </style>
 </head>
 <body>
@@ -76,14 +122,110 @@
   {% endif %}
 
   {% if chart_data_all %}
-    <div style="page-break-before: always;"></div>
     <h2>Revenue & Net Income or Profit — All Years</h2>
     <img
       src="data:image/png;base64,{{ chart_data_all }}"
       alt="All-years line chart"
       style="max-width:100%;height:auto;border:1px solid #ccc;"
     />
+    <div class="page-cut"></div>    
   {% endif %}
+
+
+  {# ——— Tier-1 Ratios & Alerts Table ——— #}
+  {% if metrics is defined and not metrics.empty %}
+    <section class="landscape-page">
+      <h2>Tier-1 Financial Ratios & Alerts</h2>
+      
+      <!-- add a tiny Jinja macro to print 0-decimals before using Tier-1 table: -->
+      {% macro money0(x) -%}
+        {%- if x is number -%}{{ "{:,.0f}".format(x) }}{%- else -%}NaN{%- endif -%}
+      {%- endmacro %}
+
+      <table class="metrics-table">
+        <!-- Optional: help WeasyPrint allocate space per column -->
+        <colgroup>
+          <col style="width:11%">  <!-- Company -->
+          <col style="width:7%">   <!-- Year -->
+          <col style="width:12%">  <!-- Revenue -->
+          <col style="width:12%">  <!-- Net Income -->
+          <col style="width:8%">   <!-- Net Margin -->
+          <col style="width:8%">   <!-- Debt/Equity -->
+          <col style="width:8%">   <!-- Debt/Assets -->
+          <col style="width:7%">   <!-- Rev YoY -->
+          <col style="width:7%">   <!-- NI YoY -->
+          <col style="width:6%">   <!-- Liquidity -->
+          <col style="width:6%">   <!-- Leverage -->
+          <col style="width:6%">   <!-- Rev Trend -->
+        </colgroup>
+
+        <thead>
+          <tr>
+            <th class="left">Company</th>
+            <th>Year</th>
+            <th>Revenue</th>
+            <th>Net Income</th>
+            <th>Net Margin</th>
+            <th>Debt/Equity</th>
+            <th>Debt/Assets</th>
+            <th>Rev YoY</th>
+            <th>NI YoY</th>
+            <th>Liquidity</th>
+            <th>Leverage</th>
+            <th>Rev Trend</th>
+          </tr>
+        </thead>
+        
+        <tbody>
+          {% for _, r in metrics.iterrows() %}
+          <tr>
+            <td class="left">{{ r["Company"] }}</td>
+            <td>{{ r["Year"]|int }}</td>
+
+            <!-- Whole numbers for money columns to prevent overflow -->
+            <td class="money">{{ r["revenue"]|default('NaN')|int }}</td>
+            <td class="money">{{ r["net_income"]|default('NaN')|int }}</td>
+
+            <td>{{ r["net_margin"]|pct }}</td>
+            <td>
+              {# Debt/Equity: print number to 2dp if not NaN #}
+              {% set de = r["debt_to_equity"] %}
+              {{ 'NaN' if de != de else ('%.2f' % de) }}
+            </td>
+            <td>
+              {# Debt/Assets: print number to 2dp if not NaN #}
+              {% set da = r["debt_to_assets"] %}
+              {{ 'NaN' if da != da else ('%.2f' % da) }}
+            </td>
+            <td>{{ r["rev_yoy"]|pct }}</td>
+            <td>{{ r["ni_yoy"]|pct }}</td>
+
+            <!-- alert dots (always render one dot; gray when missing) -->
+            {% set liq = r["alert_liquidity"] %}
+            <td><span class="dot {{ liq if liq else 'gray' }}"></span></td>
+
+            {% set lev = r["alert_leverage"] %}
+            <td><span class="dot {{ lev if lev else 'gray' }}"></span></td>
+
+            {% set rtr = r["alert_revtrend"] %}
+            <td><span class="dot {{ rtr if rtr else 'gray' }}"></span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      
+      <!-- tiny Legend -->      
+      <div class="legend" style="margin-top:.5rem;margin-bottom:.75rem;">
+        Legend:
+        <span class="dot green"></span>green = OK /
+        <span class="dot red"></span>red = warning /
+        <span class="dot gray"></span> gray = not available
+      </div>
+    </div>
+    {% endif %}
+  
+  
+  {# ——— Footer Disclaimer ——— #}
   <p style="font-size:12px;color:#666;margin-top:1.5rem;">
     <em>Data disclaimer:</em> Figures shown are illustrative. Year labels may reflect
     non-aligned fiscal years across companies, and values may be normalized/rounded.
