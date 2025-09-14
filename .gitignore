@@ -1,22 +1,31 @@
-# Env files - these are used to store environment variables
+# Env
 .env
 
-# Caches/artifacts
+# Python caches / test cache
 __pycache__/
 *.pyc
 .pytest_cache/
 
 # Local scratch
 enhancement_*/
-*.zip
 
-# Runtime and local artifacts
-/.pdf/
+# Default: ignore PDFs & XLSX
 *.pdf
+*.xlsx
 
-# User uploads should never be versioned
-/uploads/*
-!/uploads/.gitkeep
+# Allow curated showcase artifacts
+!static/screenshots/report_ai_analysis.pdf
+!static/screenshots/Financial_metrics_ratios_Tier1.xlsx
+!static/screenshots/report_preview.png
+!static/screenshots/chart1.png
+!static/screenshots/chart2.png
 
-# keep demo ZIP fixtures under samples
+# Allow sample ZIP fixtures in samples/
 !samples/*.zip
+
+# Runtime artifacts directory kept out of git
+.pdf/
+
+# User uploads: never versioned (keep placeholder)
+uploads/*
+!uploads/.gitkeep

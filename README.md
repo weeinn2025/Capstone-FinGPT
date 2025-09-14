@@ -1,7 +1,7 @@
 Capstone‑FinGPT
 ===============
 
-A lightweight Flask web app to ingest financial statements, preview and clean them, generate a concise AI-powered analysis + charts, and download a PDF report.
+A lightweight Flask web app to ingest financial statements, preview and clean them, generate a concise AI-powered analysis + charts, and download a PDF or Excel report.
 
 🚀 Live demo
 
@@ -23,48 +23,73 @@ https://github.com/weeinn2025/Capstone-FinGPT
 > match audited filings. Do not use for investment decisions. Always verify
 > against the company’s latest 10-K/10-Q or annual report.
 
+> 🔒 **Privacy Note**  
+> This project does not collect, store, or process any personal data.  
+> All included datasets are illustrative, anonymized, or publicly available.  
+> Users are responsible for ensuring compliance with their own data protection, PDPA, or regulatory requirements when adapting this project.
+
 
 Features
 ========
-(Note: “The application is a work in progress with ongoing enhancements, including advanced features, visualization, and AI, with a demo available upon request.”)
+## Feature Disclaimer  
+*  The application is a work in progress with ongoing enhancements, including advanced features, visualization, and AI.  
+*  This public release provides the core functionality only, while certain advanced features, analytics, and integrations are reserved for internal/private use and may be showcased selectively in the future (demo available upon request).
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
      - ✅   support **.xlsx**  (via `pandas` + `openpyxl`- same logical columns; multiple sheets are supported (first sheet is read by default))
      - ✅   support **.csv**   (header row required, example: Company,Year,LineItem,Value)
      - ✅   support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
+
+2.   **Samples included**
+     - ✅   Located in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
      - ✅   Try the samples:   `sample_financials_2020_2024_xlsx` (for multi-company all-years line gragh), `sample_companies_2024.csv` (for multi-company grouped bars), `sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
 
-2.   **Preview before analysis**
+3.   **Preview before analysis**
      - ✅   see the **first 10 rows** on a `/preview` screen before analysis, then click **Analyze this file**.
 
-3.   **Best-effort normalization**
+4.   **Best-effort normalization**
      - ✅   Canonical schema (columns): Company | Year | LineItem | Value
-     - ✅   `Company | Year | LineItem | Value` (trims headers, coerces numbers, drops blank rows; falls back to raw columns if mapping fails).
      - ✅   Trims headers, coerces numbers, drops blank rows.
      - ✅   Falls back to raw columns if mapping fails.
  
-4.   **AI summary**
-     - ✅   generates a concise 2–3 sentence narrative via **Gemini** when `GEMINI_*` env vars are set.
-     - ✅   app works without AI keys too, shows a friendly “AI disabled” note, and renders summary, chart, and PDF.
+5.   **AI summary**
+     - ✅   Generates a concise 3-5 sentence narrative on multi-year performance via **Gemini** when `GEMINI_*` env vars are set.
+     - ✅   Graceful fallback when AI is disabled.
+     - ✅   The app also works without AI keys, showing a friendly ‘AI disabled’ note while still rendering summary, charts, and PDF. 
 
-5.   **Interactive charts (Plotly) - dashboard**
-     - ✅   grouped bars of **Revenue** vs **Net income** for the **latest year**.
+6.   **Interactive charts (Plotly) - dashboard**
+     - ✅   Grouped bars of **Revenue** vs **Net income** for the **latest year**.
      - ✅   Canonicalizes line items so common names map correctly - Synonym mapping (≈):
      -       *  Revenue: “revenue”, “total revenue”, “sales”, “total sales”
      -       *  Net income: “net income”, “net profit”, “profit”
-     - ✅   If Plotly JSON is not present, the page falls back to a static PNG.
+     - ✅   Line chart: **Multi-year Revenue & Net income**.
+     - ✅   Fallback to Matplotlib PNG snapshot when Kaleido unavailable. For example, if Plotly JSON is not present, the page falls back to a static PNG.
 
-6.   **PDF export report - Data + Chart + AI analysis**
-     - ✅   Includes data table, AI text, and the **same chart** as an image.  
-     - ✅   Primary path: Plotly **via Kaleido → PNG → PDF**.  
-     - ✅   Fallback: **Matplotlib grouped bars** (no Chrome/Kaleido required).
+7.   **PDF export report - Data + Chart + AI analysis**
+     - ✅   Includes data table, AI text, and the **same chart** as an image.
      - ✅   Renders a bar chart and lets you **download a nicely formatted PDF**.
      - ✅   One-click Download as PDF renders the data + AI text and embeds the same chart as a PNG.
+     - ✅   Primary path: Plotly **via Kaleido → PNG → PDF**.  
+     - ✅   Fallback: **Matplotlib grouped bars** (no Chrome/Kaleido required).
      - ✅   If Kaleido is unavailable, export still works via a Matplotlib grouped snapshot.
-     - ✅   To enable Plotly → PNG locally, install Chrome once:
+     - ✅   To enable Plotly → PNG locally, install Chrome once using:
             ```bash
              plotly_get_chrome
+     - ✅   Tier-1 financial ratios and alerts table included.
+     - ✅   Revenue & Net Income charts embedded (latest year + multi-year).
+     - ✅   Fixed column widths for clean alignment in wide tables.
+
+8.  **Excel export**
+     - ✅   Tier-1 ratios + alerts exported as a formatted Excel workbook.
+     - ✅   Revenue & Net Income formatted with whole-number thousands.
+     - ✅   Percentages shown with 2 decimals.
+     - ✅   Alert columns display **colored filled cells (green/red/gray)** for clearer readability.   
+
+9.  **Safety & validation**
+     - ✅   `GET /` (home page) is **not** rate-limited;  
+     - ✅   Uploads limited to 5 MB, `POST /preview` and `POST /upload` are limited to **10 requests per minute** per endpoint (demo safety).
+     - ✅   For production → configure a shared store or use Redis/Memcached with Flask-Limiter.  
      - ✅   “This is what the output looks like” with short narrative - AI analysis:
 
  
@@ -84,7 +109,7 @@ Features
 Preview (first page):  
 ![Sample PDF Report (Preview)](static/report_preview.png)  
 
-[📄 Download Sample PDF](static/screenshots/report.pdf)
+[📄 Download Sample PDF](static/screenshots/report_ai_analysis.pdf)
 
 **To Note:**
 • Different fiscal year-ends (Apple: late Sep; Microsoft: Jun 30; NVIDIA: late Jan).
@@ -93,16 +118,9 @@ Preview (first page):
 [annualreports.com]
       
 
-  
-7.   **Samples included**
-     - ✅   Located in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
+10.  **Clear error messages** for unreadable or invalid files.
 
-8.   **Safety**
-     - ✅   `GET /` (home page) is **not** rate-limited;  
-     - ✅   `POST /preview` and `POST /upload` are limited to **10 requests per minute** (demo safety).
-     - ✅   For production → configure a shared store or use Redis/Memcached with Flask-Limiter.  
 
-9.  **Clear error messages** for unreadable or invalid files.
 
 
 How it flows
@@ -218,6 +236,10 @@ Testing & linting
 
 Deployment
 ==========
+⚠️ Security best practices:  
+- Never commit your `.env` file or API keys.  
+- Use HTTPS in production and run Flask with Gunicorn/uWSGI.  
+- Consider Redis/Memcached for distributed rate limiting.  
 
 Render (✅ Done)
 

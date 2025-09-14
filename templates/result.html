@@ -9,9 +9,46 @@
     th { background: #f2f2f2; }
     td:first-child, th:first-child { text-align: left; }
     .ai-summary { font-style: italic; border-top: 1px solid #ccc; padding-top: 1rem; }
+
+    /* --- Metrics table + alert dots --- */
+    .metrics-wrap { margin-top: 1.25rem; }
+    .metrics-table { width: 100%; border-collapse: collapse; }
+    .metrics-table th, .metrics-table td { border: 1px solid #ccc; padding: 6px; text-align: right; }
+    .metrics-table th { background: #f6f7f9; }
+    .metrics-table td.left, .metrics-table th.left { text-align: left; }
+    
+    /* alert dots */
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
+    .dot.green { background:#16a34a; }
+    .dot.red   { background:#dc2626; }
+    .dot.gray  { background:#9ca3af; }   /* <- add this - neutral gray for not available */
+    
+    .na { color:#777; font-style: italic; }  /* keep this for other places */
+  
+    /* Legend + buttons spacing */
+    .legend{
+      display: inline-flex;            /* nice horizontal layout */
+      align-items: center;
+      gap: .5rem;
+      margin: .75rem 0 1rem;           /* ← space above and below legend */
+      font-size: 12px;
+      color: #333;
+  }
+    .legend .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .legend .dot.green{ background:#16a34a; }
+    .legend .dot.red{   background:#dc2626; }
+    .legend .dot.gray{  background:#9ca3af; }
+
+    /* keep the action buttons comfortably below the legend */
+    .actions{
+      margin: 0 0 1rem;                /* ← extra space under buttons block */
+      display: inline-flex;            /* (optional) put buttons on one row */
+      gap: .5rem;                      /* (optional) spacing between buttons */
+  }
   </style>
 </head>
 <body>
+
 
   {# ← Flashed error messages,to show any flash() messages from your Flask route #}
   {% with messages = get_flashed_messages() %}
@@ -58,10 +95,77 @@
     <div class="ai-summary">
       <h3>AI Analysis</h3>
       <p>{{ ai_text }}</p>
+      
+      {# ——— Tier-1 Ratios & Alerts ——— #}
+      {% if metrics is defined and not metrics.empty %}
+      <div class="metrics-wrap">
+        <h3>Tier-1 Financial Ratios & Alerts</h3>
+        <table class="metrics-table">
+          <thead>
+            <tr>
+              <th class="left">Company</th>
+              <th>Year</th>
+              <th>Revenue</th>
+              <th>Net Income</th>
+              <th>Net Margin</th>
+              <th>Debt/Equity</th>
+              <th>Debt/Assets</th>
+              <th>Rev YoY</th>
+              <th>NI YoY</th>
+              <th>Liquidity</th>
+              <th>Leverage</th>
+              <th>Rev Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for _, r in metrics.iterrows() %}
+            <tr>
+              <td class="left">{{ r["Company"] }}</td>
+              <td>{{ r["Year"]|int }}</td>
 
-            
-      <!-- ↓↓↓ Download single PDF form inserted here with embedded data ↓↓↓ -->
-      <form id="pdf-form" action="{{ url_for('download_pdf') }}" method="post">
+              <!-- numeric columns -->
+              <td>{{ r["revenue"]|default('NaN')|currency }}</td>
+              <td>{{ r["net_income"]|default('NaN')|currency }}</td>
+              <td>{{ r["net_margin"]|pct }}</td>
+              <td>
+                {# Debt/Equity: print number to 2dp if not NaN #}
+                {% set de = r["debt_to_equity"] %}
+                {{ 'NaN' if de != de else ('%.2f' % de) }}
+              </td>
+              <td>
+                {% set da = r["debt_to_assets"] %}
+                {{ 'NaN' if da != da else ('%.2f' % da) }}
+              </td>
+              <td>{{ r["rev_yoy"]|pct }}</td>  
+              <td>{{ r["ni_yoy"]|pct }}</td>
+
+              <!-- alert dots (always render one dot; gray when missing) -->
+              {% set liq = r["alert_liquidity"] %}
+              <td><span class="dot {{ liq if liq else 'gray' }}"></span></td>
+
+              {% set lev = r["alert_leverage"] %}
+              <td><span class="dot {{ lev if lev else 'gray' }}"></span></td>
+
+              {% set rtr = r["alert_revtrend"] %}
+              <td><span class="dot {{ rtr if rtr else 'gray' }}"></span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <!-- tiny Legend -->
+        <div class="legend">
+          Legend:
+          <span class="dot green"></span>green = OK /
+          <span class="dot red"></span>red = warning /
+          <span class="dot gray"></span>gray = not available
+        </div>
+      </div>  {# <-- close .metrics-wrap div #}  
+      {% endif %}
+
+    {# ——— Download PDF & Excel buttons ——— #}          
+    <!-- ↓↓↓ Download single PDF form inserted here with embedded data ↓↓↓ -->
+    <div class="actions">
+      <form method="post" action="{{ url_for('download_pdf') }}">      
         <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
         <!-- ai_text is just plain text -->
         <input type="hidden" name="ai_text"   value="{{ ai_text }}">
@@ -71,7 +175,13 @@
         <input type="hidden" name="chart_data_all" value="{{ chart_data_all or '' }}">
         <button type="submit">Download as PDF</button>
       </form>
-    </div>  {# <-- close .ai-summary div #}
+
+      <form method="post" action="{{ url_for('export_excel') }}">>      
+        <!-- keep it short: just post the summary and recompute on server -->
+        <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'>
+        <button type="submit">Download Excel (with colors)</button>
+      </form>
+    </div>  {# <-- close .actions div #}
 
   {% else %}
     <p class="ai-summary">
@@ -136,7 +246,6 @@
         opt.value = '__ALL__';
         opt.textContent = 'All years';
         yearSel.appendChild(opt);
-
         
         // NEW: default to All years and render it now
         yearSel.value = '__ALL__';
