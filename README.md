@@ -185,7 +185,7 @@ Local Setup
      GEMINI_MODEL	(Optional)  --- >  Model name; e.g., gemini-1.5-flash
      (If these are unset, analysis runs without AI text).
 
-6.   Then Run locally:
+5.   Then Run locally:
      flask run or python app.py
 
      # Visit http://127.0.0.1:5000
@@ -296,7 +296,7 @@ Capstone-FinGPT/
 ├─ static/screenshots     # optional assets (logos/CSS/JS)
 |  ├─ chart.png
 |  ├─ pdf_sample.png
-│  ├─ pdf_report.pdf
+│  ├─ pdf_report_ai_analysis.pdf
 ├─ tests/                 # add unit tests here
 │  └─ (placeholder)
 └─ .github/workflows/
