@@ -44,8 +44,33 @@ load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
 # ---- 2) Grab secrets / config ---------------------------------------
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_URL = os.environ.get("GEMINI_URL")
+
+# Build GEMINI_URL from envs (preferred) -- > can still override with a full URL
+_api_ver   = os.environ.get("GEMINI_API_VERSION", "v1beta").strip()
+_model_sel = os.environ.get("GEMINI_MODEL", "flash").strip().lower()
+
+# Map short names to full model IDs -- > can extend this later
+_model_map = {
+    "flash": "models/gemini-2.5-flash",
+    "pro":   "models/gemini-2.5-pro",
+}
+
+# Allow passing a full model id directly (e.g., "models/gemini-2.5-pro")
+# or use the short alias
+if _model_sel in _model_map: 
+    _model_id = _model_map[_model_sel]
+elif _model_sel.startswith("models/"):
+    _model_id = _model_sel
+else:
+    # Fallback: assume a bare name and prefix it
+    _model_id = f"models/{_model_sel}"
+
+# Final URL composed from version + model id
+GEMINI_URL = f"https://generativelanguage.googleapis.com/{_api_ver}/{_model_id}:generateContent"
+
+# Final flag
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY and GEMINI_URL)  # <-- instead of raising
+
 
 # ---- 3) Flask app setup ---------------------------------------------
 app = Flask(__name__)
