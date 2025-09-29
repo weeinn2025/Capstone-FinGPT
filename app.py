@@ -43,8 +43,8 @@ load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
 
 # ---- 2) Grab secrets / config ---------------------------------------
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_URL = os.environ.get("GEMINI_URL")
+GEMINI_API_KEY  = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_URL      = os.environ.get("GEMINI_URL", "").strip()
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY and GEMINI_URL)  # <-- instead of raising
 
 # ---- 3) Flask app setup ---------------------------------------------
