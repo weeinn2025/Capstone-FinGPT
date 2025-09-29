@@ -45,7 +45,24 @@ load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_URL = os.environ.get("GEMINI_URL")
-GEMINI_AVAILABLE = bool(GEMINI_API_KEY and GEMINI_URL)  # <-- instead of raising
+
+# --- Auto-derive Gemini URL if not supplied & normalize model -------
+GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1").strip()   # v1 or v1beta
+GEMINI_MODEL = (os.getenv("GEMINI_MODEL", "") or "").strip()
+
+# normalize short aliases people might set
+_alias = GEMINI_MODEL.lower()
+if _alias in {"", "flash", "gemini-flash-latest", "gemini-1.5-flash-latest", "gemini-1.5-flash"}:
+    GEMINI_MODEL = "gemini-2.5-flash"
+elif _alias in {"pro", "gemini-pro-latest", "gemini-1.5-pro", "gemini-1.5-pro-latest"}:
+    GEMINI_MODEL = "gemini-2.5-pro"
+
+if not GEMINI_URL:
+    GEMINI_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
+
+# Consider Gemini available if we at least have a key (URL is auto-built above)
+GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
+
 
 # ---- 3) Flask app setup ---------------------------------------------
 app = Flask(__name__)
@@ -418,23 +435,35 @@ def pct_filter(val):
 
 
 # --- 6) Gemini caller -------------------------------------------------------------
-def call_gemini(prompt: str) -> str:
+def call_gemini(prompt: str, temperature: float = 0.2, max_tokens: int = 256) -> str:
+    """
+    Calls the Gemini REST API (v1 or v1beta). We pass the API key via query string (?key=),
+    which is broadly supported. Returns text or '' if empty/safety-blocked.
+    Raises requests.HTTPError on non-2xx so the caller can flash the error.
+    """
+    # ensure ?key= is present exactly once
+    if ("?key=" not in GEMINI_URL) and ("&key=" not in GEMINI_URL):
+        post_url = GEMINI_URL + (("&" if "?" in GEMINI_URL else "?") + f"key={GEMINI_API_KEY}")
+    else:
+        post_url = GEMINI_URL
+
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256},
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
     }
-    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": GEMINI_API_KEY}
+    headers = {"Content-Type": "application/json"}
 
-    resp = requests.post(GEMINI_URL, headers=headers, json=payload, timeout=20)
+    resp = requests.post(post_url, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     data = resp.json()
 
-    # v1 response shape
+    # v1/v1beta preferred shape
     try:
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except (KeyError, IndexError, TypeError):
-        # fallback for older bison payloads
-        return data.get("candidates", [{}])[0].get("output", "").strip()
+        txt = data["candidates"][0]["content"]["parts"][0]["text"]
+        return (txt or "").strip()
+    except Exception:
+        # very old/bison fallback
+        return (data.get("candidates", [{}])[0].get("output", "") or "").strip()
 
 
 # [ADDED] ---- Metrics & Alerts ------------------------------------------
