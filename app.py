@@ -1,4 +1,5 @@
 # ---- 0) Imports ---------------------------------------------------
+
 # (1) Load → (2) read env vars → (3) use them.
 import base64
 import json
@@ -27,11 +28,13 @@ from weasyprint import HTML
 from xlsxwriter.utility import xl_col_to_name
 
 # ---- 1) Load environment variables ----------------------------------
+
 # Make sure this happens *before* you read from os.environ
 ENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
 
 # ---- 2) Grab secrets / config ---------------------------------------
+
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_URL = os.environ.get("GEMINI_URL")
@@ -63,10 +66,12 @@ if not GEMINI_URL:
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
 
 # ---- 3) Flask app setup ---------------------------------------------------
+
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
 
 # ---- limit uploads to 5 MB ------------------------------------------------
+
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 # ensure uploads folder exists
@@ -74,6 +79,7 @@ UPLOAD_FOLDER = Path(__file__).parent / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 # ---- 4) Rate limiter ------------------------------------------------------
+
 storage_uri = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 limiter = Limiter(
     key_func=get_remote_address,
@@ -84,6 +90,7 @@ limiter.init_app(app)
 
 
 # ---- 4a) Health check route ---------------------------------------------------
+
 @app.get("/health")
 @limiter.exempt
 def health():
@@ -91,6 +98,7 @@ def health():
 
 
 # ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
+
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
 
 
@@ -181,6 +189,7 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
 
 
 # ----------- Build Charts -------------------------------------------------------
+
 def build_plotly_multi_year(clean_df: pd.DataFrame) -> go.Figure:
     """Line chart: Revenue & Net income or profit across all years, per company."""
     df = clean_df.copy()
@@ -478,6 +487,7 @@ def build_matplotlib_all_years_line(clean_df: pd.DataFrame) -> str:
 
 
 # --- 5) Jinja filters -----------------------------------------------------------
+
 @app.template_filter("currency")
 def currency_filter(val):
     """$ with 2 decimals — used by existing templates (e.g., result.html summary)."""
@@ -506,6 +516,7 @@ def pct_filter(val):
 
 
 # --- 6) Call Gemini -------------------------------------------------------------
+
 _GEMINI_DEFAULT_MODEL = (
     os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 )
@@ -617,6 +628,7 @@ def call_gemini(
 
 
 # [ADDED] ---- Metrics & Alerts ------------------------------------------
+
 def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
     """
     Build Tier-1 metrics and alert flags from a long-form DataFrame with
@@ -732,11 +744,11 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---- 7) Upload & AI Analysis Route -----------------------------------------------
+
 @app.get("/")
 @limiter.exempt
 def index():
     return render_template("index.html")
-
 
 @app.post("/upload")
 @limiter.limit("10 per minute")
@@ -852,6 +864,7 @@ def upload_file():
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
+    
     fig_json = None  # interactive Plotly (latest year) for page
     chart_data = None  # base64 PNG for PDF (latest-year bars)
     years = []  # year dropdown
@@ -917,6 +930,7 @@ def upload_file():
 
 
 # ---- 7a) Preview route ---------------------------------------------------------
+
 @app.post("/preview")
 @limiter.limit("10 per minute")
 def preview():
@@ -951,6 +965,7 @@ def preview():
 
 
 # ---- 8) PDF Download Route -----------------------------------------------------
+
 @app.route("/download_pdf", methods=["POST"])
 def download_pdf():
     summary = json.loads(request.form["summary"])
@@ -988,6 +1003,7 @@ def download_pdf():
 
 
 # ---- 9) Excel Export Route -----------------------------------------------------
+
 @app.post("/export_excel")
 def export_excel():
     """
