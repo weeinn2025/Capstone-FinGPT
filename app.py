@@ -45,20 +45,41 @@ load_dotenv(dotenv_path=ENV_PATH)  # must run before os.environ[...] is used
 FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_URL = os.environ.get("GEMINI_URL")
-GEMINI_AVAILABLE = bool(GEMINI_API_KEY and GEMINI_URL)  # <-- instead of raising
 
-# ---- 3) Flask app setup ---------------------------------------------
+
+# --- Auto-derive Gemini URL if not supplied & normalize model -------
+GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1").strip()   # v1 or v1beta
+GEMINI_MODEL = (os.getenv("GEMINI_MODEL", "") or "").strip()
+
+# normalize short aliases people might set
+_alias = GEMINI_MODEL.lower()
+if _alias in {"", "flash", "gemini-flash-latest", "gemini-1.5-flash-latest", "gemini-1.5-flash"}:
+    GEMINI_MODEL = "gemini-2.5-flash"
+elif _alias in {"pro", "gemini-pro-latest", "gemini-1.5-pro", "gemini-1.5-pro-latest"}:
+    GEMINI_MODEL = "gemini-2.5-pro"
+
+if not GEMINI_URL:
+    GEMINI_URL = (
+        f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}"
+        f"/models/{GEMINI_MODEL}:generateContent"
+    )
+
+# Consider Gemini available if we at least have a key (URL is auto-built above)
+GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
+
+
+# ---- 3) Flask app setup ---------------------------------------------------
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
 
-# ---- limit uploads to 5 MB ------------------------------------------
+# ---- limit uploads to 5 MB ------------------------------------------------
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 # ensure uploads folder exists
 UPLOAD_FOLDER = Path(__file__).parent / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
-# ---- 4) Rate limiter ------------------------------------------------
+# ---- 4) Rate limiter ------------------------------------------------------
 storage_uri = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 limiter = Limiter(
     key_func=get_remote_address, default_limits=[], storage_uri=storage_uri
@@ -66,14 +87,14 @@ limiter = Limiter(
 limiter.init_app(app)
 
 
-# ---- 4a) Health check route --------------------------------------------
+# ---- 4a) Health check route ---------------------------------------------------
 @app.get("/health")
 @limiter.exempt
 def health():
     return {"status": "ok"}, 200
 
 
-# ---- 4b) Upload helpers: allowed types, readers, normalizer ---------
+# ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
 
 
@@ -163,7 +184,10 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     return out, warn
 
 
-# ---- Charts ----------------------------------------------------------
+# ----------- Build Charts -------------------------------------------------------
+
+# --- Matplotlib fallback for the 'Multi-year" line chart ------------------------
+
 def build_plotly_multi_year(clean_df):
     """Line chart: Revenue & Net income or profit across all years, per company."""
     df = clean_df.copy()
@@ -241,7 +265,8 @@ def build_plotly_multi_year(clean_df):
     return fig
 
 
-# --- Interactive Plotly figure for the page (latest year) ---
+# --- Interactive Plotly figure for the page (latest year) -----------------------
+
 def build_plotly_chart(clean_df, latest_year=None):
     """Grouped bars of Revenue vs Net income (or profit) for the selected/latest Year.
     Expects canonical columns: Company | Year | LineItem | Value.
@@ -256,7 +281,7 @@ def build_plotly_chart(clean_df, latest_year=None):
     else:
         latest_year = None
 
-    # ------ NEW: canonicalize LineItem values ------------------------
+    # ------ NEW: canonicalize LineItem values -------------------------------------
 
     li_norm = (
         df["LineItem"]
@@ -278,6 +303,7 @@ def build_plotly_chart(clean_df, latest_year=None):
         ["Net income", "Revenue"],
         default=df["LineItem"].astype(str),
     )
+
 
     # --- Build pivot for grouped bars, on the canonical names build traces -----------
     # print("Line items seen:", sorted(df["LI_CANON"].unique()))
@@ -316,7 +342,8 @@ def build_plotly_chart(clean_df, latest_year=None):
     return fig
 
 
-# --- Matplotlib fallback snapshot (multi-company grouped bars) -------
+# --- Matplotlib fallback snapshot (multi-company grouped bars) ------------------
+
 def build_matplotlib_grouped(clean_df, latest_year=None):
     import numpy as np
 
@@ -387,7 +414,69 @@ def build_matplotlib_grouped(clean_df, latest_year=None):
     return base64.b64encode(buf.read()).decode("ascii")
 
 
-# --- 5) Jinja filter for currency formatting ----------------------------------
+# --- Add Matplotlib fallback for the "all-years" line chart ---------------------
+
+def build_matplotlib_all_years_line(clean_df):      # <-- NEW helper goes here
+    """
+    Matplotlib fallback for the 'All years' line chart when Kaleido/Plotly PNG
+    export isn't available. Returns a base64-encoded PNG string.
+    Plots Revenue and Net income per company across all years.
+    """
+    df = clean_df.copy()
+
+    # Canonicalize line items similarly to the Plotly version
+    li_norm = (
+        df["LineItem"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z]+", " ", regex=True)
+        .str.strip()
+    )
+    df["LI_CANON"] = np.select(
+        [
+            li_norm.str.contains(r"\b(?:net income|net profit|profit)\b", regex=True, na=False),
+            li_norm.str.contains(r"\b(?:revenue|total revenue|sales|total sales)\b", regex=True, na=False),
+        ],
+        ["Net income", "Revenue"],
+        default=df["LineItem"].astype(str),
+    )
+
+    keep = df["LI_CANON"].isin(["Revenue", "Net income"])
+    g = (
+        df[keep]
+        .groupby(["Year", "Company", "LI_CANON"], dropna=True)["Value"]
+        .sum()
+        .reset_index()
+        .sort_values(["Year", "Company", "LI_CANON"])
+    )
+
+    # Build the figure
+    fig, ax = plt.subplots(figsize=(10.5, 5.4))
+    companies = sorted(pd.unique(g["Company"]))
+    for comp in companies:
+        sub_rev = g[(g["Company"] == comp) & (g["LI_CANON"] == "Revenue")]
+        sub_ni  = g[(g["Company"] == comp) & (g["LI_CANON"] == "Net income")]
+
+        # Lines + markers for readability
+        ax.plot(sub_rev["Year"], sub_rev["Value"], marker="o", linestyle="-", label=f"{comp} — Revenue")
+        ax.plot(sub_ni["Year"],  sub_ni["Value"],  marker="o", linestyle="--", label=f"{comp} — Net income")
+
+    ax.set_title("Revenue & Net Income or Profit — All Years")
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Value")
+    ax.legend(loc="upper left", fontsize=9, ncol=2)
+    fig.tight_layout()
+
+    # Encode to base64
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=160)
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("ascii")
+
+
+
+# --- 5) Jinja filter for currency formatting --------------------------------------
 @app.template_filter("currency")
 def currency_filter(val):
     """$ with 2 decimals — used by existing templates (e.g., result.html summary)."""
@@ -417,24 +506,113 @@ def pct_filter(val):
         return "NaN"
 
 
-# --- 6) Gemini caller -------------------------------------------------------------
-def call_gemini(prompt: str) -> str:
+# --- 6) Call Gemini or Gemini caller -------------------------------------------------------
+import time
+import random
+
+# Good defaults if envs aren’t provided
+_GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+_GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
+_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -> str:
+    """Build the REST URL for generateContent."""
+    m = (model or _GEMINI_DEFAULT_MODEL).strip()
+    ver = (api_version or _GEMINI_API_VERSION).strip()
+    # Example: https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent
+    return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
+
+def _extract_text(data: dict) -> str:
+    """
+    Robustly extract text from Gemini responses.
+    Supports v1/v1beta shape and very old bison 'output' fallback.
+    """
+    # Preferred modern shape (v1 / v1beta)
+    try:
+        parts = data["candidates"][0]["content"]["parts"]
+        # Join all text parts if there are several
+        texts = [p.get("text", "") for p in parts if isinstance(p, dict)]
+        txt = " ".join(t for t in texts if t).strip()
+        if txt:
+            return txt
+    except Exception:
+        pass
+
+    # Some payloads put the text at a slightly different spot
+    try:
+        txt = data["candidates"][0]["content"]["parts"][0]["text"]
+        if txt:
+            return txt.strip()
+    except Exception:
+        pass
+
+    # Very old / bison fallback
+    try:
+        txt = data.get("candidates", [{}])[0].get("output", "")
+        if txt:
+            return txt.strip()
+    except Exception:
+        pass
+
+    # Nothing useful found
+    return ""
+
+def call_gemini(
+    prompt: str,
+    *,
+    temperature: float = 0.2,
+    max_output_tokens: int = 256,
+    model: str | None = None,
+    api_version: str | None = None,
+    timeout: int = 20,
+    max_retries: int = 3,
+) -> str:
+    """
+    Resilient Gemini call:
+    - Builds URL from env (no GEMINI_URL needed)
+    - Retries on 429/5xx with exponential backoff + jitter
+    - Parses both modern and legacy response shapes
+    """
+    if not _GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+
+    url = _gemini_endpoint(model=model, api_version=api_version)
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256},
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_output_tokens},
     }
-    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": GEMINI_API_KEY}
+    headers = {"Content-Type": "application/json"}
+    params = {"key": _GEMINI_API_KEY}
 
-    resp = requests.post(GEMINI_URL, headers=headers, json=payload, timeout=20)
-    resp.raise_for_status()
-    data = resp.json()
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, headers=headers, params=params, json=payload, timeout=timeout)
+            # Retry only on 429/5xx; raise for other client errors
+            if resp.status_code in (429, 500, 502, 503, 504):
+                raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
+            resp.raise_for_status()
 
-    # v1 response shape
-    try:
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except (KeyError, IndexError, TypeError):
-        # fallback for older bison payloads
-        return data.get("candidates", [{}])[0].get("output", "").strip()
+            data = resp.json()
+            txt = _extract_text(data)
+            if not txt:
+                raise ValueError("Empty AI response")
+            return txt
+
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError, ValueError) as e:
+            last_err = e
+            # Only retry on transient cases; otherwise break
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            transient = isinstance(e, (requests.Timeout, requests.ConnectionError)) or status in (429, 500, 502, 503, 504)
+            if not transient or attempt == max_retries:
+                break
+            # backoff: 0.8s, 1.6s, 3.2s … + jitter
+            delay = (2 ** (attempt - 1)) * 0.8 + random.uniform(0, 0.3)
+            time.sleep(delay)
+
+    # Bubble a clear error up to your flash() handler
+    raise RuntimeError(f"Gemini call failed after {max_retries} attempts: {last_err}")
+
 
 
 # [ADDED] ---- Metrics & Alerts ------------------------------------------
@@ -500,7 +678,7 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
     }
     d["key"] = d["LineItem"].map(aliases).fillna(d["LineItem"])
 
-    # Pivot to wide -------------------------------------------------
+    # Pivot to wide ---------------------------------------------------
     wide = (
         d.pivot_table(
             index=["Company", "Year"], columns="key", values="Value", aggfunc="sum"
@@ -509,7 +687,7 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["Company", "Year"])
     )
 
-    # Helpers (safe numeric ops) -------------------------------------
+    # Helpers (safe numeric ops) --------------------------------------
     def safe_col(frame: pd.DataFrame, name: str) -> pd.Series:
         """Always return a numeric Series (NaN if missing)."""
 
@@ -537,16 +715,17 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         wide["equity"] = equity  # keep it for Excel or debugging
 
     # Prefer true debt; otherwise use liabilities as a proxy
-    debt_like = debt.combine_first(liab)  # NEW
+    debt_like = debt.where(debt.notna(), liab)    # NEW   
+    
 
-    # Ratios -----------------------------------------------------------
+    # Ratios --------------------------------------------------------------
     wide["revenue"] = rev
     wide["net_income"] = ni
     wide["net_margin"] = safe_div(ni, rev)
     wide["debt_to_equity"] = safe_div(debt_like, equity)  # CHANGED
     wide["debt_to_assets"] = safe_div(debt_like, assets)  # CHANGED
 
-    # ---- Growth (index-safe via transform) ---------------------------
+    # ---- Growth (index-safe via transform) ------------------------------
     wide["rev_yoy"] = wide.groupby("Company", sort=False)["revenue"].transform(
         lambda s: s.pct_change()
     )
@@ -554,7 +733,7 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         lambda s: s.pct_change()
     )
 
-    # Alerts -----------------------------------------------------------
+    # Alerts --------------------------------------------------------------
     def flag_class(val, threshold_low=None, threshold_high=None, inverse=False):
         if pd.isna(val):
             return None
@@ -591,7 +770,8 @@ def index():
 def upload_file():
     saved_name = request.form.get("saved_filename")
 
-    # ---- locate file (preview or fresh upload) ----
+
+    # ---- locate file (preview or fresh upload) ----------------------------------
     if saved_name:
         # Came from preview screen
         filepath = UPLOAD_FOLDER / saved_name
@@ -690,7 +870,7 @@ def upload_file():
         + "\n".join(lines)
     )
 
-    # --- Call AI ---------------------
+    # --- Call AI -----------------------------------------------------------------
     if GEMINI_AVAILABLE:
         try:
             ai_text = call_gemini(prompt)
@@ -705,9 +885,11 @@ def upload_file():
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
+    
     # Build interactive Plotly chart + PNG snapshot for PDF (Matplotlib fallback)
     # fig_json must always be defined (None means "no interactive chart")
-    # --- Charts (always set fig_json & chart_data) -----------------------
+    # --- Charts (always set fig_json & chart_data) ------------------------------
+
     fig_json = None  # interactive Plotly (latest year) for page
     chart_data = None  # base64 PNG for PDF (latest-year bars)
     years = []  # year dropdown
@@ -718,6 +900,7 @@ def upload_file():
     needed = {"Company", "Year", "LineItem", "Value"}
     has_canonical = needed.issubset(use_df.columns)
 
+
     # All-years line chart if Year exists
     if "Year" in use_df.columns and use_df["Year"].notna().any():
         fig_all = build_plotly_multi_year(use_df)
@@ -727,9 +910,13 @@ def upload_file():
                 fig_all.to_image(format="png", scale=2)  # needs kaleido
             ).decode("ascii")
         except Exception as e:
-            app.logger.warning("Plotly->PNG failed (all years): %s", e)
-            chart_data_all = None  # fine; PDF will just omit the all-years image
+            app.logger.warning(
+                "Plotly->PNG failed (all years). Using Matplotlib fallback. Error: %s",
+                e,
+            )
+            chart_data_all = build_matplotlib_all_years_line(use_df)
 
+   
     if has_canonical:
         # Interactive latest-year grouped bars for the page
         fig = build_plotly_chart(use_df)
@@ -758,6 +945,8 @@ def upload_file():
     else:
         # Not canonical → still produce a PNG so pdf.html always has an image
         chart_data = build_matplotlib_grouped(use_df)
+
+
 
     # [ADDED] ---- Compute Tier-1 metrics + alerts -----------------------
     metrics = compute_metrics(use_df) if has_canonical else pd.DataFrame()
