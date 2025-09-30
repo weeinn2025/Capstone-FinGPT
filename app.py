@@ -91,8 +91,11 @@ limiter.init_app(app)
 
 # ---- 4a) Health check route ---------------------------------------------------
 
+
 @app.get("/health")
 @limiter.exempt
+
+
 def health():
     return {"status": "ok"}, 200
 
@@ -189,6 +192,7 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
 
 
 # ----------- Build Charts -------------------------------------------------------
+
 
 def build_plotly_multi_year(clean_df: pd.DataFrame) -> go.Figure:
     """Line chart: Revenue & Net income or profit across all years, per company."""
@@ -488,7 +492,9 @@ def build_matplotlib_all_years_line(clean_df: pd.DataFrame) -> str:
 
 # --- 5) Jinja filters -----------------------------------------------------------
 
+
 @app.template_filter("currency")
+
 def currency_filter(val):
     """$ with 2 decimals — used by existing templates (e.g., result.html summary)."""
     try:
@@ -498,6 +504,7 @@ def currency_filter(val):
 
 
 @app.template_filter("currency0")
+
 def currency0_filter(val):
     """$ with no decimals — keeps wide PDF table narrow."""
     try:
@@ -507,6 +514,7 @@ def currency0_filter(val):
 
 
 @app.template_filter("pct")
+
 def pct_filter(val):
     """percentage with 2 decimals; safe on NaN."""
     try:
@@ -629,6 +637,7 @@ def call_gemini(
 
 # [ADDED] ---- Metrics & Alerts ------------------------------------------
 
+
 def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
     """
     Build Tier-1 metrics and alert flags from a long-form DataFrame with
@@ -685,11 +694,13 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["Company", "Year"])
     )
 
+    
     def safe_col(frame: pd.DataFrame, name: str) -> pd.Series:
         if name in frame.columns:
             return pd.to_numeric(frame[name], errors="coerce")
         return pd.Series(np.nan, index=frame.index, dtype="float64")
 
+    
     def safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
         a = pd.to_numeric(a, errors="coerce")
         b = pd.to_numeric(b, errors="coerce").replace({0: np.nan})
@@ -721,6 +732,7 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         lambda s: s.pct_change()
     )
 
+    
     def flag_class(val, threshold_low=None, threshold_high=None, inverse=False):
         if pd.isna(val):
             return None
@@ -745,13 +757,17 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
 # ---- 7) Upload & AI Analysis Route -----------------------------------------------
 
+
 @app.get("/")
 @limiter.exempt
+
 def index():
     return render_template("index.html")
 
+
 @app.post("/upload")
 @limiter.limit("10 per minute")
+
 def upload_file():
     saved_name = request.form.get("saved_filename")
 
@@ -784,6 +800,7 @@ def upload_file():
         flash(f"Error reading file: {e}")
         return redirect(request.url_root)
 
+    
     df_norm, warn = normalize_financial_df(raw_df)
     if warn:
         flash(warn)
@@ -863,9 +880,10 @@ def upload_file():
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
-    # --- Charts (always set fig_json & chart_data) ------------------------------
     
-    fig_json = None  # interactive Plotly (latest year) for page
+    # --- Charts (always set fig_json & chart_data) ------------------------------
+
+        fig_json = None  # interactive Plotly (latest year) for page
     chart_data = None  # base64 PNG for PDF (latest-year bars)
     years = []  # year dropdown
     figs_by_year_json = "{}"  # per-year figures for client switching
@@ -931,8 +949,10 @@ def upload_file():
 
 # ---- 7a) Preview route ---------------------------------------------------------
 
+
 @app.post("/preview")
 @limiter.limit("10 per minute")
+
 def preview():
     if "file" not in request.files:
         flash("No file part in request.")
@@ -967,6 +987,7 @@ def preview():
 # ---- 8) PDF Download Route -----------------------------------------------------
 
 @app.route("/download_pdf", methods=["POST"])
+
 def download_pdf():
     summary = json.loads(request.form["summary"])
     ai_text = request.form["ai_text"]
@@ -1005,6 +1026,8 @@ def download_pdf():
 # ---- 9) Excel Export Route -----------------------------------------------------
 
 @app.post("/export_excel")
+
+
 def export_excel():
     """
     Creates an Excel file with conditional formatting (green/red) for Tier-1 alerts.
@@ -1077,12 +1100,14 @@ def export_excel():
         ws.set_column(f"{col_letter(ix_rev_yoy)}:{col_letter(ix_ni_yoy)}", 12, pct_fmt)
         ws.set_column(f"{col_letter(ix_alert_liq)}:{col_letter(ix_alert_rev)}", 4, hide_text)
 
+        
         def cf_eq(col_idx: int, text: str, fmt):
             ws.conditional_format(
                 f"{col_letter(col_idx)}2:{col_letter(col_idx)}{nrows}",
                 {"type": "cell", "criteria": "==", "value": f'"{text}"', "format": fmt},
             )
 
+        
         def cf_blank(col_idx: int, fmt):
             ws.conditional_format(
                 f"{col_letter(col_idx)}2:{col_letter(col_idx)}{nrows}",
