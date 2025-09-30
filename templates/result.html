@@ -161,27 +161,8 @@
         </div>
       </div>  {# <-- close .metrics-wrap div #}  
       {% endif %}
+    </div>  {# <-- close .ai-summary div #}
 
-    {# ——— Download PDF & Excel buttons ——— #}          
-    <!-- ↓↓↓ Download single PDF form inserted here with embedded data ↓↓↓ -->
-    <div class="actions">
-      <form method="post" action="{{ url_for('download_pdf') }}">      
-        <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
-        <!-- ai_text is just plain text -->
-        <input type="hidden" name="ai_text"   value="{{ ai_text }}">
-        <!-- latest-year bars (already there) -->
-        <input type="hidden" name="chart_data" value="{{ chart_data }}">
-        <!-- NEW: all-years line chart - ship the chart PNG as a base64 string --> 
-        <input type="hidden" name="chart_data_all" value="{{ chart_data_all or '' }}">
-        <button type="submit">Download as PDF</button>
-      </form>
-
-      <form method="post" action="{{ url_for('export_excel') }}">>      
-        <!-- keep it short: just post the summary and recompute on server -->
-        <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'>
-        <button type="submit">Download Excel (with colors)</button>
-      </form>
-    </div>  {# <-- close .actions div #}
 
   {% else %}
     <p class="ai-summary">
@@ -190,6 +171,30 @@
       </span>
     </p>
   {% endif %}
+
+
+
+  {# ——— Download PDF & Excel buttons ——— #}
+  <!-- Always show action buttons (PDF & Excel), even if AI text is empty -->          
+  <!-- ↓↓↓ Download single PDF form inserted here with embedded data ↓↓↓ -->
+  <div class="actions">
+    <form method="post" action="{{ url_for('download_pdf') }}">      
+      <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
+      <!-- ai_text is just plain text -->
+      <input type="hidden" name="ai_text"   value="{{ ai_text }}">
+      <!-- latest-year bars (already there) -->
+      <input type="hidden" name="chart_data" value="{{ chart_data }}">
+      <!-- NEW: all-years line chart - ship the chart PNG as a base64 string --> 
+      <input type="hidden" name="chart_data_all" value="{{ chart_data_all or '' }}">
+      <button type="submit">Download as PDF</button>
+    </form>
+
+    <form method="post" action="{{ url_for('export_excel') }}">
+      <!-- keep it short: just post the summary and recompute on server -->
+      <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'>
+      <button type="submit">Download Excel (with colors)</button>
+    </form>
+  </div>  {# <-- close .actions div #}
 
   
   {# ——— Financial Chart ——— #}
