@@ -23,7 +23,7 @@
     @page { size: A4 portrait; margin: 18mm; }         
 
     /* Named page for wide content or wide page */
-    @page wide { size: A4 landscape; margin: 15mm; }   
+    @page wide { size: A4 landscape; margin: 15mm; }
 
 
     /* utilities */
@@ -54,9 +54,6 @@
     .legend { margin: 8px 0 14px; font-size:12px; color:#333; }
     .legend .dot { width:8px; height:8px; margin:0 .25rem 0 .5rem; }
 
-    /* Wide (landscape) last page */
-    @page { size: A4 portrait; margin: 18mm; }
-    @page wide { size: A4 landscape; margin: 15mm; }
     .landscape-page { page: wide; break-before: page; }
     .landscape-page, .landscape-page * { break-inside: avoid; }
   </style>
@@ -221,7 +218,7 @@
         <span class="dot red"></span>red = warning /
         <span class="dot gray"></span> gray = not available
       </div>
-    </div>
+    </section>
     {% endif %}
   
   
