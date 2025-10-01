@@ -828,7 +828,7 @@ def upload_file():
             ai_text = None
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
-    
+
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
     fig_json = None  # interactive Plotly (latest year) for page
