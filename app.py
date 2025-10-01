@@ -124,11 +124,7 @@ def is_allowed_file(filename: str) -> bool:
 def read_zip_concat(zip_path: Path) -> pd.DataFrame:
     """Concatenate ALL CSV/XLSX files in a ZIP into one DataFrame."""
     with zipfile.ZipFile(zip_path, "r") as zf:
-        members = [
-            n
-            for n in zf.namelist()
-            if n.lower().endswith((".csv", ".xlsx"))
-        ]
+        members = [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
         if not members:
             raise ValueError("ZIP has no CSV/XLSX files.")
         frames = []
@@ -213,13 +209,7 @@ def build_plotly_multi_year(clean_df: pd.DataFrame) -> go.Figure:
     """Line chart: Revenue & Net income or profit across all years, per company."""
     df = clean_df.copy()
 
-    li_norm = (
-        df["LineItem"]
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z]+", " ", regex=True)
-        .str.strip()
-    )
+    li_norm = df["LineItem"].astype(str).str.lower().str.replace(r"[^a-z]+", " ", regex=True).str.strip()
     df["LI_CANON"] = np.select(
         [
             li_norm.str.contains(
@@ -308,13 +298,7 @@ def build_plotly_chart(
     else:
         latest_year = None
 
-    li_norm = (
-        df["LineItem"]
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z]+", " ", regex=True)
-        .str.strip()
-    )
+    li_norm = df["LineItem"].astype(str).str.lower().str.replace(r"[^a-z]+", " ", regex=True).str.strip()
     df["LI_CANON"] = np.select(
         [
             li_norm.str.contains(
@@ -391,13 +375,7 @@ def build_matplotlib_grouped(
     else:
         latest_year = None
 
-    li_norm = (
-        df["LineItem"]
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z]+", " ", regex=True)
-        .str.strip()
-    )
+    li_norm = df["LineItem"].astype(str).str.lower().str.replace(r"[^a-z]+", " ", regex=True).str.strip()
     df["LI_CANON"] = np.select(
         [
             li_norm.str.contains(r"\b(net income|net profit|profit)\b"),
@@ -420,17 +398,9 @@ def build_matplotlib_grouped(
     )
 
     companies = pivot.index.tolist()
-    rev = (
-        pivot["Revenue"].tolist()
-        if "Revenue" in pivot.columns
-        else [0.0] * len(companies)
-    )
-    ni = (
-        pivot["Net income"].tolist()
-        if "Net income" in pivot.columns
-        else [0.0] * len(companies)
-    )
-
+    rev = pivot["Revenue"].tolist() if "Revenue" in pivot.columns else [0.0] * len(companies)
+    ni = pivot["Net income"].tolist() if "Net income" in pivot.columns else [0.0] * len(companies)
+    
     x = np.arange(len(companies))
     width = 0.38
     fig, ax = plt.subplots(figsize=(9, 4.8))
@@ -459,13 +429,7 @@ def build_matplotlib_all_years_line(clean_df: pd.DataFrame) -> str:
     """
     df = clean_df.copy()
 
-    li_norm = (
-        df["LineItem"]
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z]+", " ", regex=True)
-        .str.strip()
-    )
+    li_norm = df["LineItem"].astype(str).str.lower().str.replace(r"[^a-z]+", " ", regex=True).str.strip()
     df["LI_CANON"] = np.select(
         [
             li_norm.str.contains(
@@ -558,9 +522,7 @@ def pct_filter(val):
 # --- 6) Call Gemini -------------------------------------------------------------
 
 
-_GEMINI_DEFAULT_MODEL = (
-    os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
-)
+_GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 _GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -644,9 +606,7 @@ def call_gemini(
                 timeout=timeout,
             )
             if resp.status_code in (429, 500, 502, 503, 504):
-                raise requests.HTTPError(
-                    f"{resp.status_code} {resp.reason}", response=resp
-                )
+                raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
             resp.raise_for_status()
 
             data = resp.json()
@@ -760,32 +720,20 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
     wide["debt_to_equity"] = safe_div(debt_like, equity)
     wide["debt_to_assets"] = safe_div(debt_like, assets)
 
-    wide["rev_yoy"] = wide.groupby("Company", sort=False)["revenue"].transform(
-        lambda s: s.pct_change()
-    )
-    wide["ni_yoy"] = wide.groupby("Company", sort=False)["net_income"].transform(
-        lambda s: s.pct_change()
-    )
+    wide["rev_yoy"] = wide.groupby("Company", sort=False)["revenue"].transform(lambda s: s.pct_change())
+    wide["ni_yoy"] = wide.groupby("Company", sort=False)["net_income"].transform(lambda s: s.pct_change())
 
     
     def flag_class(val, threshold_low=None, threshold_high=None, inverse=False):
         if pd.isna(val):
             return None
         if inverse:
-            return (
-                "red" if (threshold_high is not None and val > threshold_high) else "green"
-            )
+            return "red" if (threshold_high is not None and val > threshold_high) else "green"
         return "red" if (threshold_low is not None and val < threshold_low) else "green"
 
-    wide["alert_liquidity"] = wide["net_margin"].apply(
-        lambda x: flag_class(x, threshold_low=0.05)
-    )
-    wide["alert_leverage"] = wide["debt_to_equity"].apply(
-        lambda x: flag_class(x, threshold_high=2, inverse=True)
-    )
-    wide["alert_revtrend"] = wide["rev_yoy"].apply(
-        lambda x: flag_class(x, threshold_low=0)
-    )
+    wide["alert_liquidity"] = wide["net_margin"].apply(lambda x: flag_class(x, threshold_low=0.05))
+    wide["alert_leverage"] = wide["debt_to_equity"].apply(lambda x: flag_class(x, threshold_high=2, inverse=True))
+    wide["alert_revtrend"] = wide["rev_yoy"].apply(lambda x: flag_class(x, threshold_low=0))
 
     return wide
 
@@ -853,13 +801,7 @@ def upload_file():
     )
     summary = summary_df.to_dict(orient="records")
 
-    li_norm_ai = (
-        use_df["LineItem"]
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z]+", " ", regex=True)
-        .str.strip()
-    )
+    li_norm_ai = use_df["LineItem"].astype(str).str.lower().str.replace(r"[^a-z]+", " ", regex=True).str.strip()
 
     ai_df = use_df.assign(
         LI_CANON=np.select(
@@ -896,18 +838,12 @@ def upload_file():
 
     prompt = (
         "Summarize multi-year performance in 3–5 sentences. "
-        "Focus on growth/decline and rough margins across years; do not invent data.\n"
-        + "\n".join(lines)
+        "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
     )
 
     if GEMINI_AVAILABLE:
         try:
             ai_text = call_gemini(prompt)
-        except Exception as e:
-            if hasattr(e, "response"):
-                print("FULL URL:", e.response.request.url)
-                print("STATUS CODE:", e.response.status_code)
-                print("BODY:", e.response.text)
             flash(f"AI call failed: {e}")
             ai_text = None
     else:
@@ -1088,9 +1024,7 @@ def export_excel():
         wb = writer.book
         ws = writer.sheets["Tier1_Ratios_Alerts"]
 
-        header_fmt = wb.add_format(
-            {"bold": True, "bg_color": "#EFEFEF", "border": 1, "align": "center"}
-        )
+        header_fmt = wb.add_format({"bold": True, "bg_color": "#EFEFEF", "border": 1, "align": "center"})
         money_fmt = wb.add_format({"num_format": "#,##0"})
         pct_fmt = wb.add_format({"num_format": "0.00%"})
 
@@ -1170,4 +1104,3 @@ def export_excel():
 if __name__ == "__main__":
     # enable full tracebacks in browser - show full Python error in browser
     app.run(debug=True)
-
