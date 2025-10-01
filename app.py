@@ -1,6 +1,7 @@
 # ---- 0) Imports ---------------------------------------------------
 
-# (1) Load → (2) read env vars → (3) use them.
+# (1) Load → (2) read env vars → (3) use them
+
 import base64
 import json
 import os
@@ -13,6 +14,7 @@ from pathlib import Path
 import matplotlib
 
 # Ensure matplotlib uses a non-GUI backend
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
@@ -39,7 +41,8 @@ FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_URL = os.environ.get("GEMINI_URL")
 
-# --- Auto-derive Gemini URL if not supplied & normalize model -------
+# --- Auto-derive Gemini URL if not supplied & normalize model --------------
+
 GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1").strip()  # v1 or v1beta
 GEMINI_MODEL = (os.getenv("GEMINI_MODEL", "") or "").strip()
 
@@ -58,10 +61,10 @@ elif _alias in {"pro", "gemini-pro-latest", "gemini-1.5-pro", "gemini-1.5-pro-la
 
 if not GEMINI_URL:
     GEMINI_URL = (
-        f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}"
-        f"/models/{GEMINI_MODEL}:generateContent"
+        f"https://generativelanguage.googleapis.com/"
+        f"{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
     )
-
+        
 # Consider Gemini available if we at least have a key (URL is auto-built above)
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
 
@@ -94,8 +97,6 @@ limiter.init_app(app)
 
 @app.get("/health")
 @limiter.exempt
-
-
 def health():
     return {"status": "ok"}, 200
 
@@ -494,7 +495,6 @@ def build_matplotlib_all_years_line(clean_df: pd.DataFrame) -> str:
 
 
 @app.template_filter("currency")
-
 def currency_filter(val):
     """$ with 2 decimals — used by existing templates (e.g., result.html summary)."""
     try:
@@ -504,7 +504,6 @@ def currency_filter(val):
 
 
 @app.template_filter("currency0")
-
 def currency0_filter(val):
     """$ with no decimals — keeps wide PDF table narrow."""
     try:
@@ -514,7 +513,6 @@ def currency0_filter(val):
 
 
 @app.template_filter("pct")
-
 def pct_filter(val):
     """percentage with 2 decimals; safe on NaN."""
     try:
@@ -524,6 +522,7 @@ def pct_filter(val):
 
 
 # --- 6) Call Gemini -------------------------------------------------------------
+
 
 _GEMINI_DEFAULT_MODEL = (
     os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
@@ -760,14 +759,12 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
 @app.get("/")
 @limiter.exempt
-
 def index():
     return render_template("index.html")
 
 
 @app.post("/upload")
 @limiter.limit("10 per minute")
-
 def upload_file():
     saved_name = request.form.get("saved_filename")
 
@@ -882,8 +879,9 @@ def upload_file():
 
     
     # --- Charts (always set fig_json & chart_data) ------------------------------
+        
 
-        fig_json = None  # interactive Plotly (latest year) for page
+    fig_json = None  # interactive Plotly (latest year) for page
     chart_data = None  # base64 PNG for PDF (latest-year bars)
     years = []  # year dropdown
     figs_by_year_json = "{}"  # per-year figures for client switching
@@ -952,7 +950,6 @@ def upload_file():
 
 @app.post("/preview")
 @limiter.limit("10 per minute")
-
 def preview():
     if "file" not in request.files:
         flash("No file part in request.")
@@ -986,8 +983,8 @@ def preview():
 
 # ---- 8) PDF Download Route -----------------------------------------------------
 
-@app.route("/download_pdf", methods=["POST"])
 
+@app.route("/download_pdf", methods=["POST"])
 def download_pdf():
     summary = json.loads(request.form["summary"])
     ai_text = request.form["ai_text"]
@@ -1025,9 +1022,8 @@ def download_pdf():
 
 # ---- 9) Excel Export Route -----------------------------------------------------
 
+
 @app.post("/export_excel")
-
-
 def export_excel():
     """
     Creates an Excel file with conditional formatting (green/red) for Tier-1 alerts.
@@ -1138,3 +1134,4 @@ def export_excel():
 if __name__ == "__main__":
     # enable full tracebacks in browser - show full Python error in browser
     app.run(debug=True)
+
