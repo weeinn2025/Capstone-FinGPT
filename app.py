@@ -844,6 +844,7 @@ def upload_file():
     if GEMINI_AVAILABLE:
         try:
             ai_text = call_gemini(prompt)
+        except Exception as e:
             flash(f"AI call failed: {e}")
             ai_text = None
     else:
