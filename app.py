@@ -1,5 +1,4 @@
 # ---- 0) Imports ---------------------------------------------------
-
 # (1) Load → (2) read env vars → (3) use them
 
 import base64
@@ -67,14 +66,12 @@ elif _alias in {
     "pro",
     "gemini-pro-latest",
     "gemini-1.5-pro",
-    "gemini-1.5-pro-latest",    # ← add comma here
+    "gemini-1.5-pro-latest",
 }:
     GEMINI_MODEL = "gemini-2.5-pro"
 
 if not GEMINI_URL:
     GEMINI_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
-    
-        
 # Consider Gemini available if we at least have a key (URL is auto-built above)
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
 
@@ -101,15 +98,12 @@ limiter = Limiter(
 )
 limiter.init_app(app)
 
-
 # ---- 4a) Health check route ---------------------------------------------------
-
 
 @app.get("/health")
 @limiter.exempt
 def health():
     return {"status": "ok"}, 200
-
 
 # ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
 
@@ -200,7 +194,6 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     out["Value"] = pd.to_numeric(out["Value"], errors="coerce")
     out = out.dropna(subset=["Year", "Value"])
     return out, warn
-
 
 # ----------- Build Charts -------------------------------------------------------
 
@@ -488,9 +481,7 @@ def build_matplotlib_all_years_line(clean_df: pd.DataFrame) -> str:
     buf.seek(0)
     return base64.b64encode(buf.read()).decode("ascii")
 
-
 # --- 5) Jinja filters -----------------------------------------------------------
-
 
 @app.template_filter("currency")
 def currency_filter(val):
@@ -500,7 +491,6 @@ def currency_filter(val):
     except Exception:
         return val
 
-
 @app.template_filter("currency0")
 def currency0_filter(val):
     """$ with no decimals — keeps wide PDF table narrow."""
@@ -508,7 +498,6 @@ def currency0_filter(val):
         return "${:,.0f}".format(float(val))
     except Exception:
         return val
-
 
 @app.template_filter("pct")
 def pct_filter(val):
@@ -518,9 +507,7 @@ def pct_filter(val):
     except Exception:
         return "NaN"
 
-
 # --- 6) Call Gemini -------------------------------------------------------------
-
 
 _GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 _GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
@@ -629,8 +616,7 @@ def call_gemini(
 
     raise RuntimeError(f"Gemini call failed after {max_retries} attempts: {last_err}")
 
-
-# [ADDED] ---- Metrics & Alerts ------------------------------------------
+# [ADDED] ---- Metrics & Alerts -----------------------------------------------------
 
 
 def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
@@ -689,12 +675,10 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["Company", "Year"])
     )
 
-    
     def safe_col(frame: pd.DataFrame, name: str) -> pd.Series:
         if name in frame.columns:
             return pd.to_numeric(frame[name], errors="coerce")
         return pd.Series(np.nan, index=frame.index, dtype="float64")
-
     
     def safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
         a = pd.to_numeric(a, errors="coerce")
@@ -722,7 +706,6 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
     wide["rev_yoy"] = wide.groupby("Company", sort=False)["revenue"].transform(lambda s: s.pct_change())
     wide["ni_yoy"] = wide.groupby("Company", sort=False)["net_income"].transform(lambda s: s.pct_change())
-
     
     def flag_class(val, threshold_low=None, threshold_high=None, inverse=False):
         if pd.isna(val):
@@ -737,15 +720,12 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
     return wide
 
-
 # ---- 7) Upload & AI Analysis Route -----------------------------------------------
-
 
 @app.get("/")
 @limiter.exempt
 def index():
     return render_template("index.html")
-
 
 @app.post("/upload")
 @limiter.limit("10 per minute")
@@ -780,7 +760,6 @@ def upload_file():
     except Exception as e:
         flash(f"Error reading file: {e}")
         return redirect(request.url_root)
-
     
     df_norm, warn = normalize_financial_df(raw_df)
     if warn:
@@ -849,11 +828,9 @@ def upload_file():
             ai_text = None
     else:
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
-
     
     # --- Charts (always set fig_json & chart_data) ------------------------------
-        
-
+ 
     fig_json = None  # interactive Plotly (latest year) for page
     chart_data = None  # base64 PNG for PDF (latest-year bars)
     years = []  # year dropdown
@@ -917,9 +894,7 @@ def upload_file():
         metrics=metrics,
     )
 
-
 # ---- 7a) Preview route ---------------------------------------------------------
-
 
 @app.post("/preview")
 @limiter.limit("10 per minute")
@@ -953,9 +928,7 @@ def preview():
         preview_rows=preview_rows,
     )
 
-
 # ---- 8) PDF Download Route -----------------------------------------------------
-
 
 @app.route("/download_pdf", methods=["POST"])
 def download_pdf():
@@ -992,9 +965,7 @@ def download_pdf():
         mimetype="application/pdf",
     )
 
-
 # ---- 9) Excel Export Route -----------------------------------------------------
-
 
 @app.post("/export_excel")
 def export_excel():
@@ -1066,14 +1037,12 @@ def export_excel():
         )
         ws.set_column(f"{col_letter(ix_rev_yoy)}:{col_letter(ix_ni_yoy)}", 12, pct_fmt)
         ws.set_column(f"{col_letter(ix_alert_liq)}:{col_letter(ix_alert_rev)}", 4, hide_text)
-
         
         def cf_eq(col_idx: int, text: str, fmt):
             ws.conditional_format(
                 f"{col_letter(col_idx)}2:{col_letter(col_idx)}{nrows}",
                 {"type": "cell", "criteria": "==", "value": f'"{text}"', "format": fmt},
             )
-
         
         def cf_blank(col_idx: int, fmt):
             ws.conditional_format(
