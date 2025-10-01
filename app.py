@@ -72,10 +72,8 @@ elif _alias in {
     GEMINI_MODEL = "gemini-2.5-pro"
 
 if not GEMINI_URL:
-    GEMINI_URL = (
-        f"https://generativelanguage.googleapis.com/"
-        f"{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
-    )
+    GEMINI_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
+    
         
 # Consider Gemini available if we at least have a key (URL is auto-built above)
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
@@ -571,11 +569,8 @@ def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -
     """Build the REST URL for generateContent."""
     m = (model or _GEMINI_DEFAULT_MODEL).strip()
     ver = (api_version or _GEMINI_API_VERSION).strip()
-    return (
-        f"https://generativelanguage.googleapis.com/"
-        f"{ver}/models/{m}:generateContent"
-    )
-
+    return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
+    
 
 def _extract_text(data: dict) -> str:
     """
@@ -649,10 +644,7 @@ def call_gemini(
                 timeout=timeout,
             )
             if resp.status_code in (429, 500, 502, 503, 504):
-                raise requests.HTTPError(
-                    f"{resp.status_code} {resp.reason}",
-                    response=resp,
-                )
+                raise requests.HTTPError({resp.status_code} {resp.reason}", response=resp)
             resp.raise_for_status()
 
             data = resp.json()
