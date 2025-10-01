@@ -519,7 +519,7 @@ def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -
     m = (model or _GEMINI_DEFAULT_MODEL).strip()
     ver = (api_version or _GEMINI_API_VERSION).strip()
     return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
-    
+
 
 def _extract_text(data: dict) -> str:
     """
@@ -679,7 +679,7 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
         if name in frame.columns:
             return pd.to_numeric(frame[name], errors="coerce")
         return pd.Series(np.nan, index=frame.index, dtype="float64")
-    
+
     def safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
         a = pd.to_numeric(a, errors="coerce")
         b = pd.to_numeric(b, errors="coerce").replace({0: np.nan})
@@ -706,7 +706,7 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
     wide["rev_yoy"] = wide.groupby("Company", sort=False)["revenue"].transform(lambda s: s.pct_change())
     wide["ni_yoy"] = wide.groupby("Company", sort=False)["net_income"].transform(lambda s: s.pct_change())
-    
+
     def flag_class(val, threshold_low=None, threshold_high=None, inverse=False):
         if pd.isna(val):
             return None
@@ -760,7 +760,7 @@ def upload_file():
     except Exception as e:
         flash(f"Error reading file: {e}")
         return redirect(request.url_root)
-    
+
     df_norm, warn = normalize_financial_df(raw_df)
     if warn:
         flash(warn)
@@ -830,7 +830,7 @@ def upload_file():
         ai_text = "(AI disabled: missing GEMINI_* env vars)"
     
     # --- Charts (always set fig_json & chart_data) ------------------------------
- 
+
     fig_json = None  # interactive Plotly (latest year) for page
     chart_data = None  # base64 PNG for PDF (latest-year bars)
     years = []  # year dropdown
@@ -1037,13 +1037,13 @@ def export_excel():
         )
         ws.set_column(f"{col_letter(ix_rev_yoy)}:{col_letter(ix_ni_yoy)}", 12, pct_fmt)
         ws.set_column(f"{col_letter(ix_alert_liq)}:{col_letter(ix_alert_rev)}", 4, hide_text)
-        
+
         def cf_eq(col_idx: int, text: str, fmt):
             ws.conditional_format(
                 f"{col_letter(col_idx)}2:{col_letter(col_idx)}{nrows}",
                 {"type": "cell", "criteria": "==", "value": f'"{text}"', "format": fmt},
             )
-        
+
         def cf_blank(col_idx: int, fmt):
             ws.conditional_format(
                 f"{col_letter(col_idx)}2:{col_letter(col_idx)}{nrows}",
@@ -1074,3 +1074,4 @@ def export_excel():
 if __name__ == "__main__":
     # enable full tracebacks in browser - show full Python error in browser
     app.run(debug=True)
+
