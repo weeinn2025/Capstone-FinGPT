@@ -21,7 +21,14 @@ import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, send_file
+from flask import (
+    Flask,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from plotly.utils import PlotlyJSONEncoder
@@ -56,7 +63,12 @@ if _alias in {
     "gemini-1.5-flash",
 }:
     GEMINI_MODEL = "gemini-2.5-flash"
-elif _alias in {"pro", "gemini-pro-latest", "gemini-1.5-pro", "gemini-1.5-pro-latest"}:
+elif _alias in {
+    "pro",
+    "gemini-pro-latest",
+    "gemini-1.5-pro",
+    "gemini-1.5-pro-latest",    # ← add comma here
+}:
     GEMINI_MODEL = "gemini-2.5-pro"
 
 if not GEMINI_URL:
@@ -114,7 +126,11 @@ def is_allowed_file(filename: str) -> bool:
 def read_zip_concat(zip_path: Path) -> pd.DataFrame:
     """Concatenate ALL CSV/XLSX files in a ZIP into one DataFrame."""
     with zipfile.ZipFile(zip_path, "r") as zf:
-        members = [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
+        members = [
+            n
+            for n in zf.namelist()
+            if n.lower().endswith((".csv", ".xlsx"))
+        ]
         if not members:
             raise ValueError("ZIP has no CSV/XLSX files.")
         frames = []
@@ -276,7 +292,10 @@ def build_plotly_multi_year(clean_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def build_plotly_chart(clean_df: pd.DataFrame, latest_year: int | None = None) -> go.Figure:
+def build_plotly_chart(
+    clean_df: pd.DataFrame,
+    latest_year: int | None = None,
+) -> go.Figure:
     """
     Grouped bars of Revenue vs Net income (or profit) for the selected/latest Year.
     Expects canonical columns: Company | Year | LineItem | Value.
@@ -329,7 +348,11 @@ def build_plotly_chart(clean_df: pd.DataFrame, latest_year: int | None = None) -
 
     fig = go.Figure()
     if "Revenue" in pivot.columns:
-        fig.add_bar(name="Revenue", x=pivot.index.tolist(), y=pivot["Revenue"].tolist())
+        fig.add_bar(
+            name="Revenue",
+            x=pivot.index.tolist(),
+            y=pivot["Revenue"].tolist(),
+        )
     if "Net income" in pivot.columns:
         fig.add_bar(
             name="Net income",
@@ -344,12 +367,21 @@ def build_plotly_chart(clean_df: pd.DataFrame, latest_year: int | None = None) -
         xaxis_title="Company",
         yaxis_title="Value",
         margin=dict(l=40, r=20, t=60, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+        ),
     )
     return fig
 
 
-def build_matplotlib_grouped(clean_df: pd.DataFrame, latest_year: int | None = None) -> str:
+def build_matplotlib_grouped(
+    clean_df: pd.DataFrame,
+    latest_year: int | None = None,
+) -> str:
     """Matplotlib fallback snapshot (multi-company grouped bars)."""
     df = clean_df.copy()
 
@@ -390,7 +422,11 @@ def build_matplotlib_grouped(clean_df: pd.DataFrame, latest_year: int | None = N
     )
 
     companies = pivot.index.tolist()
-    rev = pivot["Revenue"].tolist() if "Revenue" in pivot.columns else [0.0] * len(companies)
+    rev = (
+        pivot["Revenue"].tolist()
+        if "Revenue" in pivot.columns
+        else [0.0] * len(companies)
+    )
     ni = (
         pivot["Net income"].tolist()
         if "Net income" in pivot.columns
@@ -535,7 +571,10 @@ def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -
     """Build the REST URL for generateContent."""
     m = (model or _GEMINI_DEFAULT_MODEL).strip()
     ver = (api_version or _GEMINI_API_VERSION).strip()
-    return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
+    return (
+        f"https://generativelanguage.googleapis.com/"
+        f"{ver}/models/{m}:generateContent"
+    )
 
 
 def _extract_text(data: dict) -> str:
@@ -610,7 +649,10 @@ def call_gemini(
                 timeout=timeout,
             )
             if resp.status_code in (429, 500, 502, 503, 504):
-                raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
+                raise requests.HTTPError(
+                    f"{resp.status_code} {resp.reason}",
+                    response=resp,
+                )
             resp.raise_for_status()
 
             data = resp.json()
