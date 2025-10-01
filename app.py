@@ -644,7 +644,9 @@ def call_gemini(
                 timeout=timeout,
             )
             if resp.status_code in (429, 500, 502, 503, 504):
-                raise requests.HTTPError({resp.status_code} {resp.reason}", response=resp)
+                raise requests.HTTPError(
+                    f"{resp.status_code} {resp.reason}", response=resp
+                )
             resp.raise_for_status()
 
             data = resp.json()
