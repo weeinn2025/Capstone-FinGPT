@@ -105,6 +105,16 @@ limiter.init_app(app)
 def health():
     return {"status": "ok"}, 200
 
+@app.get("/ai_status")
+@limiter.exempt
+def ai_status():
+    """Lightweight runtime check (no secrets exposed)."""
+    # Don't reveal secrets; only whether they exist
+    has_key = bool(os.environ.get("GEMINI_API_KEY"))
+    model = os.environ.get("GEMINI_MODEL") or "auto: gemini-2.5-flash"
+    ver = os.environ.get("GEMINI_API_VERSION", "v1")
+    return {"gemini_available": has_key, "model": model, "api_version": ver}, 200
+
 # ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
 
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
