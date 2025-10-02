@@ -100,10 +100,12 @@ limiter.init_app(app)
 
 # ---- 4a) Health check route ---------------------------------------------------
 
+
 @app.get("/health")
 @limiter.exempt
 def health():
     return {"status": "ok"}, 200
+
 
 @app.get("/ai_status")
 @limiter.exempt
@@ -114,6 +116,7 @@ def ai_status():
     model = os.environ.get("GEMINI_MODEL") or "auto: gemini-2.5-flash"
     ver = os.environ.get("GEMINI_API_VERSION", "v1")
     return {"gemini_available": has_key, "model": model, "api_version": ver}, 200
+
 
 # ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
 
@@ -204,6 +207,7 @@ def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     out["Value"] = pd.to_numeric(out["Value"], errors="coerce")
     out = out.dropna(subset=["Year", "Value"])
     return out, warn
+
 
 # ----------- Build Charts -------------------------------------------------------
 
@@ -403,7 +407,7 @@ def build_matplotlib_grouped(
     companies = pivot.index.tolist()
     rev = pivot["Revenue"].tolist() if "Revenue" in pivot.columns else [0.0] * len(companies)
     ni = pivot["Net income"].tolist() if "Net income" in pivot.columns else [0.0] * len(companies)
-    
+
     x = np.arange(len(companies))
     width = 0.38
     fig, ax = plt.subplots(figsize=(9, 4.8))
@@ -491,7 +495,9 @@ def build_matplotlib_all_years_line(clean_df: pd.DataFrame) -> str:
     buf.seek(0)
     return base64.b64encode(buf.read()).decode("ascii")
 
+
 # --- 5) Jinja filters -----------------------------------------------------------
+
 
 @app.template_filter("currency")
 def currency_filter(val):
@@ -501,6 +507,7 @@ def currency_filter(val):
     except Exception:
         return val
 
+
 @app.template_filter("currency0")
 def currency0_filter(val):
     """$ with no decimals — keeps wide PDF table narrow."""
@@ -509,6 +516,7 @@ def currency0_filter(val):
     except Exception:
         return val
 
+
 @app.template_filter("pct")
 def pct_filter(val):
     """percentage with 2 decimals; safe on NaN."""
@@ -516,6 +524,7 @@ def pct_filter(val):
         return "{:.2f}%".format(float(val) * 100.0)
     except Exception:
         return "NaN"
+
 
 # --- 6) Call Gemini -------------------------------------------------------------
 
@@ -626,6 +635,7 @@ def call_gemini(
 
     raise RuntimeError(f"Gemini call failed after {max_retries} attempts: {last_err}")
 
+
 # [ADDED] ---- Metrics & Alerts -----------------------------------------------------
 
 
@@ -730,12 +740,15 @@ def compute_metrics(df_long: pd.DataFrame) -> pd.DataFrame:
 
     return wide
 
+
 # ---- 7) Upload & AI Analysis Route -----------------------------------------------
+
 
 @app.get("/")
 @limiter.exempt
 def index():
     return render_template("index.html")
+
 
 @app.post("/upload")
 @limiter.limit("10 per minute")
@@ -904,7 +917,9 @@ def upload_file():
         metrics=metrics,
     )
 
+
 # ---- 7a) Preview route ---------------------------------------------------------
+
 
 @app.post("/preview")
 @limiter.limit("10 per minute")
@@ -938,7 +953,9 @@ def preview():
         preview_rows=preview_rows,
     )
 
+
 # ---- 8) PDF Download Route -----------------------------------------------------
+
 
 @app.route("/download_pdf", methods=["POST"])
 def download_pdf():
@@ -975,7 +992,9 @@ def download_pdf():
         mimetype="application/pdf",
     )
 
+
 # ---- 9) Excel Export Route -----------------------------------------------------
+
 
 @app.post("/export_excel")
 def export_excel():
