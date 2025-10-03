@@ -1,6 +1,7 @@
 # ---- 0) Imports ---------------------------------------------------
 # (1) Load → (2) read env vars → (3) use them
 
+import re          # <--- log message to redact URL to prevent it prints a URL with ?key= again
 import base64
 import json
 import os
@@ -533,6 +534,11 @@ _GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 
+def _redact_url(s: str) -> str:
+    """Scrub any '?key=' or '&key=' query value from a URL string."""
+    return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
+
+
 def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -> str:
     """Build the REST URL for generateContent."""
     m = (model or _GEMINI_DEFAULT_MODEL).strip()
@@ -586,6 +592,7 @@ def call_gemini(
     - Builds URL from env (no GEMINI_URL needed)
     - Retries on 429/5xx with exponential backoff + jitter
     - Parses both modern and legacy response shapes
+    - Never leaks the API key in errors
     """
     if not _GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set")
@@ -611,6 +618,7 @@ def call_gemini(
                 json=payload,
                 timeout=timeout,
             )
+            # Fast-fail on known transient status codes to enter retry path
             if resp.status_code in (429, 500, 502, 503, 504):
                 raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
             resp.raise_for_status()
@@ -618,23 +626,30 @@ def call_gemini(
             data = resp.json()
             txt = _extract_text(data)
             if not txt:
+                # Explicit ValueError we handle below (redacted)
                 raise ValueError("Empty AI response")
             return txt
 
         except (requests.Timeout, requests.ConnectionError, requests.HTTPError, ValueError) as e:
-            last_err = e
+            last_err = e            
             status = getattr(getattr(e, "response", None), "status_code", None)
-            transient = isinstance(
-                e,
-                (requests.Timeout, requests.ConnectionError),
-            ) or status in (429, 500, 502, 503, 504)
+            reason = getattr(getattr(e, "response", None), "reason", None)
+            req = getattr(getattr(e, "response", None), "request", None)
+            raw_url = getattr(req, "url", "")
+            safe_url = _redact_url(raw_url)
+
+            # Retry only on timeouts/connection errors and 429/5xx
+            transient = isinstance(e, (requests.Timeout, requests.ConnectionError)) or status in (429, 500, 502, 503, 504)
             if not transient or attempt == max_retries:
-                break
+                # Raise a safe, redacted error (never echo ?key=)
+                if isinstance(e, ValueError):
+                    # e.g., "Empty AI response"
+                    raise RuntimeError("Gemini request failed: Empty AI response")
+                raise RuntimeError(f"Gemini request failed (status={status} {reason}) at {safe_url}")
+
+            # backoff + jitter
             delay = (2 ** (attempt - 1)) * 0.8 + random.uniform(0, 0.3)
             time.sleep(delay)
-
-    raise RuntimeError(f"Gemini call failed after {max_retries} attempts: {last_err}")
-
 
 # [ADDED] ---- Metrics & Alerts -----------------------------------------------------
 
