@@ -1,7 +1,7 @@
 # ---- 0) Imports ---------------------------------------------------
 # (1) Load → (2) read env vars → (3) use them
 
-import re          # <--- log message to redact URL to prevent it prints a URL with ?key= again
+import re
 import base64
 import json
 import os
@@ -630,8 +630,7 @@ def call_gemini(
                 raise ValueError("Empty AI response")
             return txt
 
-        except (requests.Timeout, requests.ConnectionError, requests.HTTPError, ValueError) as e:
-            last_err = e            
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError, ValueError) as e:            
             status = getattr(getattr(e, "response", None), "status_code", None)
             reason = getattr(getattr(e, "response", None), "reason", None)
             req = getattr(getattr(e, "response", None), "request", None)
