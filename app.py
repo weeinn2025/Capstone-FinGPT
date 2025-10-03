@@ -645,6 +645,7 @@ def call_gemini(
             delay = (2 ** (attempt - 1)) * 0.8 + random.uniform(0, 0.3)
             time.sleep(delay)
 
+
 # [ADDED] ---- Metrics & Alerts -----------------------------------------------------
 
 
