@@ -609,9 +609,7 @@ def call_gemini(
 
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.post(
-                url, headers=headers, params=params, json=payload, timeout=timeout
-        )
+            resp = requests.post(url, headers=headers, params=params, json=payload, timeout=timeout)
             if resp.status_code in (429, 500, 502, 503, 504):
                 raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
             resp.raise_for_status()
@@ -630,7 +628,13 @@ def call_gemini(
             safe_url = _redact_url(raw_url)
 
             # Retry only on timeouts/connection errors and 429/5xx
-            transient = isinstance(e, (requests.Timeout, requests.ConnectionError)) or status in (429, 500, 502, 503, 504)
+            transient = isinstance(e, (requests.Timeout, requests.ConnectionError)) or status in (
+                429,
+                500,
+                502,
+                503,
+                504,
+            )
             if not transient or attempt == max_retries:
                 # Raise a safe, redacted error (never echo ?key=)
                 if isinstance(e, ValueError):
