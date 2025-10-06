@@ -541,34 +541,25 @@ def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -
     return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
 
 
-def _extract_text(data: dict) -> str:
+def _extract_text(resp_json: dict) -> str:
     """
-    Robustly extract text from Gemini responses.
-    Supports v1/v1beta shape and very old bison 'output' fallback.
+    Pull plain text from Gemini responses.
+    Works with v1 responses and older v1beta fallbacks.
     """
     try:
-        parts = data["candidates"][0]["content"]["parts"]
-        texts = [p.get("text", "") for p in parts if isinstance(p, dict)]
-        txt = " ".join(t for t in texts if t).strip()
-        if txt:
-            return txt
+        cands = resp_json.get("candidates") or []
+        for c in cands:
+            content = c.get("content") or {}
+            parts = content.get("parts") or []
+            texts = [p.get("text") for p in parts if isinstance(p, dict) and "text" in p]
+            if texts:
+                # Join all text parts; Gemini sometimes returns multiple parts
+                return "\n".join(t for t in texts if t)
+        # legacy v1beta fallback some SDKs used
+        if cands and isinstance(cands[0], dict) and "output" in cands[0]:
+            return str(cands[0]["output"])
     except Exception:
         pass
-
-    try:
-        txt = data["candidates"][0]["content"]["parts"][0]["text"]
-        if txt:
-            return txt.strip()
-    except Exception:
-        pass
-
-    try:
-        txt = data.get("candidates", [{}])[0].get("output", "")
-        if txt:
-            return txt.strip()
-    except Exception:
-        pass
-
     return ""
 
 
@@ -599,10 +590,18 @@ def call_gemini(
     url = _gemini_endpoint(model=model, api_version=api_version)
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": temperature,
-            "maxOutputTokens": max_output_tokens,
+        "system_instruction": {
+            "role": "system",
+            "parts": [
+                {
+                    "text": (
+                        "You are a financial analyst. Write 3–6 concise sentences "
+                        "summarizing multi-year trends; do not give investment advice."
+                    )
+                }
+            ],
         },
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512, "responseMimeType": "text/plain"},
     }
     headers = {"Content-Type": "application/json"}
     params = {"key": _GEMINI_API_KEY}
