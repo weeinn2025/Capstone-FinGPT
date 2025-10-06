@@ -592,16 +592,16 @@ def call_gemini(
         "contents": [{"parts": [{"text": prompt}]}],
         "system_instruction": {
             "role": "system",
-            "parts": [{"text": (
-                "You are a financial analyst. Write 3–6 concise sentences "
-                "summarizing multi-year trends; do not give investment advice."
-            )}]
+            "parts": [
+                {
+                    "text": (
+                        "You are a financial analyst. Write 3–6 concise sentences "
+                        "summarizing multi-year trends; do not give investment advice."
+                    )
+                }
+            ],
         },
-        "generationConfig": {
-            "temperature": 0.4,
-            "maxOutputTokens": 512,
-            "responseMimeType": "text/plain"
-        }
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512, "responseMimeType": "text/plain"},
     }
     headers = {"Content-Type": "application/json"}
     params = {"key": _GEMINI_API_KEY}
