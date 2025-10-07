@@ -606,12 +606,12 @@ def call_gemini(prompt: str) -> str:
             "topP": 0.95,
             "topK": 40,
             "maxOutputTokens": 512,
-            "responseMimeType": "text/plain"
+            "responseMimeType": "text/plain",
         },
     }
     headers = {"Content-Type": "application/json"}
     params = {"key": _GEMINI_API_KEY}
-    
+
     try:
         r = requests.post(url, params=params, json=payload, timeout=30)
         # If 400/403/etc, dump error details to logs so we can see the exact reason
