@@ -607,7 +607,7 @@ def call_gemini(prompt: str) -> str:
             "topK": 40,
             "maxOutputTokens": 512,
             "responseMimeType": "text/plain"
-        }
+        },
     }
     headers = {"Content-Type": "application/json"}
     params = {"key": _GEMINI_API_KEY}
@@ -842,7 +842,7 @@ def upload_file():
 
     prompt = _clean_prompt(prompt)
     text = call_gemini(prompt)
-    
+
     prompt = (
         "Summarize multi-year performance in 3–5 sentences. "
         "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
