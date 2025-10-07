@@ -5,8 +5,6 @@ import re
 import base64
 import json
 import os
-import random
-import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -529,38 +527,11 @@ def pct_filter(val):
 
 # --- 6) Call Gemini -------------------------------------------------------------
 
-_GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
-_GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
-_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-
-def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -> str:
-    """Build the REST URL for generateContent."""
-    m = (model or _GEMINI_DEFAULT_MODEL).strip()
-    ver = (api_version or _GEMINI_API_VERSION).strip()
-    return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
-
-
-def _extract_text(resp_json: dict) -> str:
-    """
-    Pull plain text from Gemini responses.
-    Works with v1 responses and older v1beta fallbacks.
-    """
-    try:
-        cands = resp_json.get("candidates") or []
-        for c in cands:
-            content = c.get("content") or {}
-            parts = content.get("parts") or []
-            texts = [p.get("text") for p in parts if isinstance(p, dict) and "text" in p]
-            if texts:
-                # Join all text parts; Gemini sometimes returns multiple parts
-                return "\n".join(t for t in texts if t)
-        # legacy v1beta fallback some SDKs used
-        if cands and isinstance(cands[0], dict) and "output" in cands[0]:
-            return str(cands[0]["output"])
-    except Exception:
-        pass
-    return ""
+# Uses the existing imports at the top: os, json, requests
+GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
 
 def _redact_url(s: str) -> str:
@@ -568,81 +539,58 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
-def call_gemini(
-    prompt: str,
-    *,
-    temperature: float = 0.2,
-    max_output_tokens: int = 256,
-    model: str | None = None,
-    api_version: str | None = None,
-    timeout: int = 20,
-    max_retries: int = 3,
+def call_gemini_v1(
+    prompt_text: str,
+    temperature: float = 0.3,
+    top_p: float = 0.9,
+    top_k: int = 32,
+    max_tokens: int = 800,
 ) -> str:
     """
-    Resilient Gemini call:
-    - Builds URL from env (no GEMINI_URL needed)
-    - Retries on 429/5xx with exponential backoff + jitter
-    - Parses both modern and legacy response shapes
+    Minimal, v1-compliant request for Gemini. Returns plain text or "".
     """
-    if not _GEMINI_API_KEY:
+    if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set")
 
-    url = _gemini_endpoint(model=model, api_version=api_version)
+    # v1 endpoint shape
+    url = f"{GEMINI_BASE}/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+
+    # Hard-truncate very long prompts just in case
+    safe_prompt = (prompt_text or "").encode("utf-8", "ignore").decode("utf-8")[:120_000].strip()
+
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "system_instruction": {
-            "role": "system",
-            "parts": [
-                {
-                    "text": (
-                        "You are a financial analyst. Write 3–6 concise sentences "
-                        "summarizing multi-year trends; do not give investment advice."
-                    )
-                }
-            ],
+        "contents": [{"role": "user", "parts": [{"text": safe_prompt}]}],
+        "generationConfig": {
+            "temperature": float(temperature),
+            "topP": float(top_p),
+            "topK": int(top_k),
+            "maxOutputTokens": int(max_tokens),
         },
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512, "responseMimeType": "text/plain"},
     }
+
     headers = {"Content-Type": "application/json"}
-    params = {"key": _GEMINI_API_KEY}
+    r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.post(url, headers=headers, params=params, json=payload, timeout=timeout)
-            if resp.status_code in (429, 500, 502, 503, 504):
-                raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
-            resp.raise_for_status()
+    # Helpful diagnostics for Render logs if anything goes wrong
+    try:
+        body = r.json()
+    except Exception:
+        body = {"_non_json_body": r.text}
 
-            data = resp.json()
-            txt = _extract_text(data)
-            if not txt:
-                raise ValueError("Empty AI response")
-            return txt
+    if r.status_code != 200:
+        safe_url = _redact_url(url)
+        # include the redacted URL to help diagnose which model/version was hit
+        raise RuntimeError(f"Gemini {r.status_code} at {safe_url}: {json.dumps(body)[:2000]}")
 
-        except (requests.Timeout, requests.ConnectionError, requests.HTTPError, ValueError) as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            reason = getattr(getattr(e, "response", None), "reason", None)
-            req = getattr(getattr(e, "response", None), "request", None)
-            raw_url = getattr(req, "url", "")
-            safe_url = _redact_url(raw_url)
-
-            # Retry only on timeouts/connection errors and 429/5xx
-            transient = isinstance(e, (requests.Timeout, requests.ConnectionError)) or status in (
-                429,
-                500,
-                502,
-                503,
-                504,
-            )
-            if not transient or attempt == max_retries:
-                # Raise a safe, redacted error (never echo ?key=)
-                if isinstance(e, ValueError):
-                    raise RuntimeError("Gemini request failed: Empty AI response")
-                raise RuntimeError(f"Gemini request failed (status={status} {reason}) at {safe_url}")
-
-            # backoff + jitter
-            delay = (2 ** (attempt - 1)) * 0.8 + random.uniform(0, 0.3)
-            time.sleep(delay)
+    # Extract first text part from v1 response
+    cands = body.get("candidates") or []
+    if not cands:
+        return ""
+    parts = cands[0].get("content", {}).get("parts", [])
+    for p in parts:
+        if "text" in p:
+            return p["text"]
+    return ""
 
 
 # [ADDED] ---- Metrics & Alerts -----------------------------------------------------
@@ -847,14 +795,20 @@ def upload_file():
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
-    prompt = (
-        "Summarize multi-year performance in 3–5 sentences. "
+    prompt_text = (
+        "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
         "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
     )
 
     if GEMINI_AVAILABLE:
         try:
-            ai_text = call_gemini(prompt)
+            ai_text = call_gemini_v1(
+                prompt_text=prompt_text,
+                temperature=0.3,
+                top_p=0.9,
+                top_k=32,
+                max_tokens=800,
+            )
         except Exception as e:
             flash(f"AI call failed: {e}")
             ai_text = None
