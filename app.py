@@ -5,8 +5,6 @@ import re
 import base64
 import json
 import os
-import random
-import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -529,48 +527,11 @@ def pct_filter(val):
 
 # --- 6) Call Gemini -------------------------------------------------------------
 
-import os, json, requests, logging
-
-_GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro").strip() or "gemini-2.5-pro"
-_GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
-_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-
-def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -> str:
-    """Build the REST URL for generateContent."""
-    m = (model or _GEMINI_DEFAULT_MODEL).strip()
-    ver = (api_version or _GEMINI_API_VERSION).strip()
-    # Do NOT include your own base URL env; v1 wants this exact host
-    return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
-
-
-def _clean_prompt(txt: str, max_len: int = 28000) -> str:
-    if txt is None:
-        return ""
-    # remove non-UTF8 and hard truncate
-    return txt.encode("utf-8", "ignore").decode("utf-8")[:max_len].strip()
-
-
-def _extract_text(resp_json: dict) -> str:
-    """
-    Pull plain text from Gemini responses.
-    Works with v1 responses and older v1beta fallbacks.
-    """
-    try:
-        cands = resp_json.get("candidates") or []
-        for c in cands:
-            content = c.get("content") or {}
-            parts = content.get("parts") or []
-            texts = [p.get("text") for p in parts if isinstance(p, dict) and "text" in p]
-            if texts:
-                # Join all text parts; Gemini sometimes returns multiple parts
-                return "\n".join(t for t in texts if t)
-        # legacy v1beta fallback some SDKs used
-        if cands and isinstance(cands[0], dict) and "output" in cands[0]:
-            return str(cands[0]["output"])
-    except Exception:
-        pass
-    return ""
+# Uses the existing imports at the top: os, json, requests
+GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
 
 def _redact_url(s: str) -> str:
@@ -578,64 +539,59 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
-def call_gemini(prompt: str) -> str:
+def call_gemini_v1(
+    prompt_text: str,
+    temperature: float = 0.3,
+    top_p: float = 0.9,
+    top_k: int = 32,
+    max_tokens: int = 800,
+) -> str:
     """
-    Calls Gemini v1 generateContent and returns the first text block, or raises with details.
+    Minimal, v1-compliant request for Gemini. Returns plain text or "".
     """
-    if not _GEMINI_API_KEY:
+    if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set")
 
-    prompt = _clean_prompt(prompt)
+    # v1 endpoint shape
+    url = f"{GEMINI_BASE}/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
-    url = _gemini_endpoint(model=model, api_version=api_version)
+    # Hard-truncate very long prompts just in case
+    safe_prompt = (prompt_text or "").encode("utf-8", "ignore").decode("utf-8")[:120_000].strip()
+
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "system_instruction": {
-            "role": "user",
-            "parts": [
-                {
-                    "text": (
-                        "You are a financial analyst. Write 3–6 concise sentences "
-                        "summarizing multi-year trends; do not give investment advice."
-                    )
-                }
-            ],
-        },
+        "contents": [
+            {"role": "user", "parts": [{"text": safe_prompt}]}
+        ],
         "generationConfig": {
-            "temperature": 0.4,
-            "topP": 0.95,
-            "topK": 40,
-            "maxOutputTokens": 512,
-            "responseMimeType": "text/plain",
+            "temperature": float(temperature),
+            "topP": float(top_p),
+            "topK": int(top_k),
+            "maxOutputTokens": int(max_tokens),
         },
     }
+
     headers = {"Content-Type": "application/json"}
-    params = {"key": _GEMINI_API_KEY}
+    r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
 
+    # Helpful diagnostics for Render logs if anything goes wrong
     try:
-        r = requests.post(url, params=params, json=payload, timeout=30)
-        # If 400/403/etc, dump error details to logs so we can see the exact reason
-        if r.status_code >= 400:
-            try:
-                logging.error("Gemini error %s: %s", r.status_code, r.json())
-            except Exception:
-                logging.error("Gemini error %s (non-JSON body): %s", r.status_code, r.text)
-            r.raise_for_status()
+        body = r.json()
+    except Exception:
+        body = {"_non_json_body": r.text}
 
-        data = r.json()
-        # Defensive extraction
-        cands = (data or {}).get("candidates", [])
-        if not cands:
-            logging.warning("Gemini returned no candidates: %s", json.dumps(data)[:500])
-            return ""  # your caller shows “Empty AI response” when it sees empty
+    if r.status_code != 200:
+        # Raise with short JSON excerpt so the UI flashes a meaningful message
+        raise RuntimeError(f"Gemini {r.status_code}: {json.dumps(body)[:2000]}")
 
-        parts = (cands[0] or {}).get("content", {}).get("parts", [])
-        out = parts[0].get("text", "").strip() if parts else ""
-        return out
-    except requests.RequestException as e:
-        # Surface a short message to UI, full to logs
-        logging.exception("Gemini request failed")
-        raise
+    # Extract first text part from v1 response
+    cands = body.get("candidates") or []
+    if not cands:
+        return ""
+    parts = cands[0].get("content", {}).get("parts", [])
+    for p in parts:
+        if "text" in p:
+            return p["text"]
+    return ""
 
 
 # [ADDED] ---- Metrics & Alerts -----------------------------------------------------
@@ -840,17 +796,21 @@ def upload_file():
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
-    prompt = _clean_prompt(prompt)
-    text = call_gemini(prompt)
-
-    prompt = (
-        "Summarize multi-year performance in 3–5 sentences. "
-        "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
+    prompt_text = (
+        "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
+        "Focus on growth/decline and rough margins across years; do not invent data.\n"
+        + "\n".join(lines)
     )
 
     if GEMINI_AVAILABLE:
         try:
-            ai_text = call_gemini(prompt)
+            ai_text = call_gemini_v1(
+                prompt_text=prompt_text,
+                temperature=0.3,
+                top_p=0.9,
+                top_k=32,
+                max_tokens=800,
+            )
         except Exception as e:
             flash(f"AI call failed: {e}")
             ai_text = None
