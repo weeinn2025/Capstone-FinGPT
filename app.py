@@ -529,7 +529,9 @@ def pct_filter(val):
 
 # --- 6) Call Gemini -------------------------------------------------------------
 
-_GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+import os, json, requests, logging
+
+_GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro").strip() or "gemini-2.5-pro"
 _GEMINI_API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1").strip() or "v1"
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -538,7 +540,15 @@ def _gemini_endpoint(model: str | None = None, api_version: str | None = None) -
     """Build the REST URL for generateContent."""
     m = (model or _GEMINI_DEFAULT_MODEL).strip()
     ver = (api_version or _GEMINI_API_VERSION).strip()
+    # Do NOT include your own base URL env; v1 wants this exact host
     return f"https://generativelanguage.googleapis.com/{ver}/models/{m}:generateContent"
+
+
+def _clean_prompt(txt: str, max_len: int = 28000) -> str:
+    if txt is None:
+        return ""
+    # remove non-UTF8 and hard truncate
+    return txt.encode("utf-8", "ignore").decode("utf-8")[:max_len].strip()
 
 
 def _extract_text(resp_json: dict) -> str:
@@ -568,30 +578,20 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
-def call_gemini(
-    prompt: str,
-    *,
-    temperature: float = 0.2,
-    max_output_tokens: int = 256,
-    model: str | None = None,
-    api_version: str | None = None,
-    timeout: int = 20,
-    max_retries: int = 3,
-) -> str:
+def call_gemini(prompt: str) -> str:
     """
-    Resilient Gemini call:
-    - Builds URL from env (no GEMINI_URL needed)
-    - Retries on 429/5xx with exponential backoff + jitter
-    - Parses both modern and legacy response shapes
+    Calls Gemini v1 generateContent and returns the first text block, or raises with details.
     """
     if not _GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set")
+
+    prompt = _clean_prompt(prompt)
 
     url = _gemini_endpoint(model=model, api_version=api_version)
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "system_instruction": {
-            "role": "system",
+            "role": "user",
             "parts": [
                 {
                     "text": (
@@ -601,48 +601,41 @@ def call_gemini(
                 }
             ],
         },
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512, "responseMimeType": "text/plain"},
+        "generationConfig": {
+            "temperature": 0.4,
+            "topP": 0.95,
+            "topK": 40,
+            "maxOutputTokens": 512,
+            "responseMimeType": "text/plain"
+        }
     }
     headers = {"Content-Type": "application/json"}
     params = {"key": _GEMINI_API_KEY}
+    
+    try:
+        r = requests.post(url, params=params, json=payload, timeout=30)
+        # If 400/403/etc, dump error details to logs so we can see the exact reason
+        if r.status_code >= 400:
+            try:
+                logging.error("Gemini error %s: %s", r.status_code, r.json())
+            except Exception:
+                logging.error("Gemini error %s (non-JSON body): %s", r.status_code, r.text)
+            r.raise_for_status()
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.post(url, headers=headers, params=params, json=payload, timeout=timeout)
-            if resp.status_code in (429, 500, 502, 503, 504):
-                raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
-            resp.raise_for_status()
+        data = r.json()
+        # Defensive extraction
+        cands = (data or {}).get("candidates", [])
+        if not cands:
+            logging.warning("Gemini returned no candidates: %s", json.dumps(data)[:500])
+            return ""  # your caller shows “Empty AI response” when it sees empty
 
-            data = resp.json()
-            txt = _extract_text(data)
-            if not txt:
-                raise ValueError("Empty AI response")
-            return txt
-
-        except (requests.Timeout, requests.ConnectionError, requests.HTTPError, ValueError) as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            reason = getattr(getattr(e, "response", None), "reason", None)
-            req = getattr(getattr(e, "response", None), "request", None)
-            raw_url = getattr(req, "url", "")
-            safe_url = _redact_url(raw_url)
-
-            # Retry only on timeouts/connection errors and 429/5xx
-            transient = isinstance(e, (requests.Timeout, requests.ConnectionError)) or status in (
-                429,
-                500,
-                502,
-                503,
-                504,
-            )
-            if not transient or attempt == max_retries:
-                # Raise a safe, redacted error (never echo ?key=)
-                if isinstance(e, ValueError):
-                    raise RuntimeError("Gemini request failed: Empty AI response")
-                raise RuntimeError(f"Gemini request failed (status={status} {reason}) at {safe_url}")
-
-            # backoff + jitter
-            delay = (2 ** (attempt - 1)) * 0.8 + random.uniform(0, 0.3)
-            time.sleep(delay)
+        parts = (cands[0] or {}).get("content", {}).get("parts", [])
+        out = parts[0].get("text", "").strip() if parts else ""
+        return out
+    except requests.RequestException as e:
+        # Surface a short message to UI, full to logs
+        logging.exception("Gemini request failed")
+        raise
 
 
 # [ADDED] ---- Metrics & Alerts -----------------------------------------------------
@@ -847,6 +840,9 @@ def upload_file():
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
+    prompt = _clean_prompt(prompt)
+    text = call_gemini(prompt)
+    
     prompt = (
         "Summarize multi-year performance in 3–5 sentences. "
         "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
