@@ -559,9 +559,7 @@ def call_gemini_v1(
     safe_prompt = (prompt_text or "").encode("utf-8", "ignore").decode("utf-8")[:120_000].strip()
 
     payload = {
-        "contents": [
-            {"role": "user", "parts": [{"text": safe_prompt}]}
-        ],
+        "contents": [{"role": "user", "parts": [{"text": safe_prompt}]}],
         "generationConfig": {
             "temperature": float(temperature),
             "topP": float(top_p),
@@ -580,8 +578,9 @@ def call_gemini_v1(
         body = {"_non_json_body": r.text}
 
     if r.status_code != 200:
-        # Raise with short JSON excerpt so the UI flashes a meaningful message
-        raise RuntimeError(f"Gemini {r.status_code}: {json.dumps(body)[:2000]}")
+        safe_url = _redact_url(url)
+        # include the redacted URL to help diagnose which model/version was hit
+        raise RuntimeError(f"Gemini {r.status_code} at {safe_url}: {json.dumps(body)[:2000]}")
 
     # Extract first text part from v1 response
     cands = body.get("candidates") or []
@@ -798,8 +797,7 @@ def upload_file():
 
     prompt_text = (
         "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
-        "Focus on growth/decline and rough margins across years; do not invent data.\n"
-        + "\n".join(lines)
+        "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
     )
 
     if GEMINI_AVAILABLE:
