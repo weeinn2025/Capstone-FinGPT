@@ -798,8 +798,7 @@ def upload_file():
     # 1) Build the prompt FIRST
     prompt = (
         "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
-        "Focus on growth/decline and rough margins across years; do not invent data.\n"
-        + "\n".join(lines)
+        "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
     )
 
     # 2) Keep the prompt reasonably short (helps avoid empty responses on very large CSVs)
@@ -820,10 +819,7 @@ def upload_file():
         # 4) Fallback: if the model returned nothing, retry with a tighter prompt
         if not ai_text.strip():
             short_lines = lines[-60:]  # last ~60 lines to keep tokens in check
-            retry_prompt = (
-                "Summarize key trends in 3–5 sentences. Be concise; no advice.\n"
-                + "\n".join(short_lines)
-            )
+            retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
             ai_text = call_gemini_v1(
                 prompt_text=_clean_prompt(retry_prompt, max_len=12000),
                 temperature=0.3,
