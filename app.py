@@ -549,7 +549,7 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
-def _clean_prompt(text: str | None, max_len: int = 20000) -> str:
+def _clean_prompt(text: str | None, max_len: int = 8000) -> str:
     """UTF-8 clean + hard truncate to keep requests within safe token limits."""
     if not text:
         return ""
@@ -813,6 +813,11 @@ def upload_file():
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
+    # --- keep only the last N rows to avoid oversized requests ---
+    MAX_LINES = 240
+    if len(lines) > MAX_LINES:
+        lines = lines[-MAX_LINES:]
+
     # 1) Build the prompt FIRST
     prompt = (
         "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
@@ -820,7 +825,7 @@ def upload_file():
     )
 
     # 2) Keep the prompt reasonably short (prevents empty responses on very large CSVs)
-    prompt = _clean_prompt(prompt, max_len=20000)
+    prompt = _clean_prompt(prompt, max_len=8000)
 
     # 3) Call Gemini ONCE
     ai_text = call_gemini_v1(
@@ -831,17 +836,22 @@ def upload_file():
         max_tokens=800,
     )
 
-    # 4) Fallback if still empty (send fewer rows)
+    # 4) Fallback if still empty (send far fewer rows)
     if not ai_text.strip():
-        short_lines = lines[-60:]  # keep last ~60 rows
+        SHORT_LINES = 40
+        short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
         retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
         ai_text = call_gemini_v1(
-            prompt_text=_clean_prompt(retry_prompt, max_len=12000),
-            temperature=0.3,
-            top_p=0.9,
+            prompt_text=_clean_prompt(retry_prompt, max_len=4000),
+            temperature=0.2,
+            top_p=0.85,
             top_k=32,
-            max_tokens=600,
+            max_tokens=500,
         )
+
+    # Optional: if still empty, show a friendly message instead of the red banner
+    if not ai_text.strip():
+        ai_text = "(AI summary temporarily unavailable for this upload. Try a smaller file or fewer companies.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
