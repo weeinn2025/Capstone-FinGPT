@@ -539,6 +539,13 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
+def _clean_prompt(text: str | None, max_len: int = 20000) -> str:
+    """UTF-8 clean + hard truncate to keep requests within safe token limits."""
+    if not text:
+        return ""
+    return text.encode("utf-8", "ignore").decode("utf-8")[:max_len].strip()
+
+
 def call_gemini_v1(
     prompt_text: str,
     temperature: float = 0.3,
