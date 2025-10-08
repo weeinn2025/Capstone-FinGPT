@@ -117,6 +117,16 @@ def ai_status():
     return {"gemini_available": has_key, "model": model, "api_version": ver}, 200
 
 
+@app.get("/ai_smoke")
+@limiter.exempt
+def ai_smoke():
+    try:
+        txt = call_gemini_v1("Reply with: OK")
+        return {"ok": True, "got": txt[:40]}, 200
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
+
+
 # ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
 
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
@@ -796,6 +806,7 @@ def upload_file():
         .sort_values(["Company", "Year", "LI_CANON"])
     )
 
+    # Build the prompt lines
     lines = []
     for (comp, yr), grp in ai_df.groupby(["Company", "Year"]):
         rev = grp.loc[grp["LI_CANON"] == "Revenue", "Value"].sum()
@@ -808,32 +819,29 @@ def upload_file():
         "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
     )
 
-    # 2) Keep the prompt reasonably short (helps avoid empty responses on very large CSVs)
+    # 2) Keep the prompt reasonably short (prevents empty responses on very large CSVs)
     prompt = _clean_prompt(prompt, max_len=20000)
 
-    # 3) Call Gemini (only once path)
-    if not GEMINI_AVAILABLE:
-        ai_text = "(AI disabled: missing GEMINI_* env vars)"
-    else:
+    # 3) Call Gemini ONCE
+    ai_text = call_gemini_v1(
+        prompt_text=prompt,
+        temperature=0.3,
+        top_p=0.9,
+        top_k=32,
+        max_tokens=800,
+    )
+
+    # 4) Fallback if still empty (send fewer rows)
+    if not ai_text.strip():
+        short_lines = lines[-60:]  # keep last ~60 rows
+        retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
         ai_text = call_gemini_v1(
-            prompt_text=prompt,
+            prompt_text=_clean_prompt(retry_prompt, max_len=12000),
             temperature=0.3,
             top_p=0.9,
             top_k=32,
-            max_tokens=800,
+            max_tokens=600,
         )
-
-        # 4) Fallback: if the model returned nothing, retry with a tighter prompt
-        if not ai_text.strip():
-            short_lines = lines[-60:]  # last ~60 lines to keep tokens in check
-            retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
-            ai_text = call_gemini_v1(
-                prompt_text=_clean_prompt(retry_prompt, max_len=12000),
-                temperature=0.3,
-                top_p=0.9,
-                top_k=32,
-                max_tokens=600,
-            )
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
