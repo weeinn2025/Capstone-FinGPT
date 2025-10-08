@@ -807,14 +807,14 @@ def upload_file():
     )
 
     # Build the prompt lines
+    # --- keep only the last N rows to avoid oversized requests ---
+    MAX_LINES = 240
     lines = []
     for (comp, yr), grp in ai_df.groupby(["Company", "Year"]):
         rev = grp.loc[grp["LI_CANON"] == "Revenue", "Value"].sum()
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
-    # --- keep only the last N rows to avoid oversized requests ---
-    MAX_LINES = 240
     if len(lines) > MAX_LINES:
         lines = lines[-MAX_LINES:]
 
@@ -836,9 +836,9 @@ def upload_file():
         max_tokens=800,
     )
 
-    # 4) Fallback if still empty (send far fewer rows)
+    # 4) Fallback if still empty (send fewer rows)
     if not ai_text.strip():
-        SHORT_LINES = 40
+        SHORT_LINES = 60
         short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
         retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
         ai_text = call_gemini_v1(
@@ -846,12 +846,8 @@ def upload_file():
             temperature=0.2,
             top_p=0.85,
             top_k=32,
-            max_tokens=500,
+            max_tokens=600,
         )
-
-    # Optional: if still empty, show a friendly message instead of the red banner
-    if not ai_text.strip():
-        ai_text = "(AI summary temporarily unavailable for this upload. Try a smaller file or fewer companies.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
