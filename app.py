@@ -539,6 +539,13 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
+def _clean_prompt(text: str | None, max_len: int = 20000) -> str:
+    """UTF-8 clean + hard truncate to keep requests within safe token limits."""
+    if not text:
+        return ""
+    return text.encode("utf-8", "ignore").decode("utf-8")[:max_len].strip()
+
+
 def call_gemini_v1(
     prompt_text: str,
     temperature: float = 0.3,
@@ -795,25 +802,38 @@ def upload_file():
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
-    prompt_text = (
+    # 1) Build the prompt FIRST
+    prompt = (
         "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
         "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
     )
 
-    if GEMINI_AVAILABLE:
-        try:
+    # 2) Keep the prompt reasonably short (helps avoid empty responses on very large CSVs)
+    prompt = _clean_prompt(prompt, max_len=20000)
+
+    # 3) Call Gemini (only once path)
+    if not GEMINI_AVAILABLE:
+        ai_text = "(AI disabled: missing GEMINI_* env vars)"
+    else:
+        ai_text = call_gemini_v1(
+            prompt_text=prompt,
+            temperature=0.3,
+            top_p=0.9,
+            top_k=32,
+            max_tokens=800,
+        )
+
+        # 4) Fallback: if the model returned nothing, retry with a tighter prompt
+        if not ai_text.strip():
+            short_lines = lines[-60:]  # last ~60 lines to keep tokens in check
+            retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
             ai_text = call_gemini_v1(
-                prompt_text=prompt_text,
+                prompt_text=_clean_prompt(retry_prompt, max_len=12000),
                 temperature=0.3,
                 top_p=0.9,
                 top_k=32,
-                max_tokens=800,
+                max_tokens=600,
             )
-        except Exception as e:
-            flash(f"AI call failed: {e}")
-            ai_text = None
-    else:
-        ai_text = "(AI disabled: missing GEMINI_* env vars)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
