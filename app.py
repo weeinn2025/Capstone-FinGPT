@@ -806,15 +806,17 @@ def upload_file():
         .sort_values(["Company", "Year", "LI_CANON"])
     )
 
+    # --- AI insight ---------------------------------------------------------
     # Build the prompt lines
-    # --- keep only the last N rows to avoid oversized requests ---
-    MAX_LINES = 240
+
     lines = []
     for (comp, yr), grp in ai_df.groupby(["Company", "Year"]):
         rev = grp.loc[grp["LI_CANON"] == "Revenue", "Value"].sum()
         ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
         lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
+    # Keep prompt modest to avoid empty responses
+    MAX_LINES = 300
     if len(lines) > MAX_LINES:
         lines = lines[-MAX_LINES:]
 
@@ -827,27 +829,39 @@ def upload_file():
     # 2) Keep the prompt reasonably short (prevents empty responses on very large CSVs)
     prompt = _clean_prompt(prompt, max_len=8000)
 
-    # 3) Call Gemini ONCE
-    ai_text = call_gemini_v1(
-        prompt_text=prompt,
-        temperature=0.3,
-        top_p=0.9,
-        top_k=32,
-        max_tokens=800,
-    )
-
-    # 4) Fallback if still empty (send fewer rows)
-    if not ai_text.strip():
-        SHORT_LINES = 60
-        short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
-        retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
+    ai_text = ""
+    try:
         ai_text = call_gemini_v1(
-            prompt_text=_clean_prompt(retry_prompt, max_len=4000),
+            prompt_text=prompt,
             temperature=0.2,
             top_p=0.85,
             top_k=32,
-            max_tokens=600,
+            max_tokens=700,
         )
+        app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
+    except Exception as e:
+        app.logger.warning("AI primary call failed: %s", e)
+
+    # 4) Fallback with fewer rows if still empty
+    if not ai_text or not ai_text.strip():
+        SHORT_LINES = 60
+        short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
+        retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
+        try:
+            ai_text = call_gemini_v1(
+                prompt_text=_clean_prompt(retry_prompt, max_len=4000),
+                temperature=0.2,
+                top_p=0.85,
+                top_k=32,
+                max_tokens=600,
+            )
+            app.logger.info("AI retry call returned length=%s", len(ai_text or ""))
+        except Exception as e:
+            app.logger.warning("AI retry call failed: %s", e)
+
+    # 5) Final guarantee: never leave empty text for the template
+    if not ai_text or not ai_text.strip():
+        ai_text = "(AI summary temporarily unavailable for this upload. Try a smaller file or fewer companies.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
