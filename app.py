@@ -124,11 +124,12 @@ def ai_smoke():
     try:
         txt = call_gemini_v1("Reply with: OK")
         got = (txt or "").strip()
-        ok = (got == "OK")
+        ok = got == "OK"
         # 200 only when the check passes; 502 when model responded but not exactly "OK"
         return ({"ok": ok, "got": got}, 200 if ok else 502)
     except Exception as e:
         return {"ok": False, "error": str(e)}, 500
+
 
 # ---- 4b) Upload helpers: allowed types, readers, normalizer -------------------
 
@@ -578,7 +579,7 @@ def call_gemini_v1(
     model_to_use = (_model_override or GEMINI_MODEL).strip()
     url_base = f"{GEMINI_BASE}/{GEMINI_API_VERSION}/models"
     headers = {"Content-Type": "application/json"}
-    
+
     # Hard-truncate very long prompts just in case
     safe_prompt = (prompt_text or "").encode("utf-8", "ignore").decode("utf-8")[:120_000].strip()
 
@@ -591,7 +592,6 @@ def call_gemini_v1(
             "maxOutputTokens": int(max_tokens),
         },
     }
-
 
     def _once(model_name: str):
         url = f"{url_base}/{model_name}:generateContent?key={GEMINI_API_KEY}"
