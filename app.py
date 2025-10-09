@@ -568,8 +568,8 @@ def call_gemini_v1(
     top_k: int = 32,
     max_tokens: int = 1000,
     _model_override: str | None = None,
-    _timeout_s: int = 45,      # NEW: use in requests.post timeout (was hardcoded 60)
-    _max_retries: int = 4,     # NEW: was fixed at 3
+    _timeout_s: int = 45,  # NEW: use in requests.post timeout (was hardcoded 60)
+    _max_retries: int = 4,  # NEW: was fixed at 3
 ) -> str:
     """
     Minimal, v1-compliant request for Gemini. Returns plain text or "".
