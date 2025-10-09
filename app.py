@@ -554,7 +554,7 @@ def _redact_url(s: str) -> str:
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
 
 
-def _clean_prompt(text: str | None, max_len: int = 8000) -> str:
+def _clean_prompt(text: str | None, max_len: int = 120_000) -> str:
     """UTF-8 clean + hard truncate to keep requests within safe token limits."""
     if not text:
         return ""
@@ -563,11 +563,13 @@ def _clean_prompt(text: str | None, max_len: int = 8000) -> str:
 
 def call_gemini_v1(
     prompt_text: str,
-    temperature: float = 0.3,
-    top_p: float = 0.9,
+    temperature: float = 0.2,
+    top_p: float = 0.85,
     top_k: int = 32,
-    max_tokens: int = 800,
+    max_tokens: int = 1000,
     _model_override: str | None = None,
+    _timeout_s: int = 45,      # NEW: use in requests.post timeout (was hardcoded 60)
+    _max_retries: int = 4,     # NEW: was fixed at 3
 ) -> str:
     """
     Minimal, v1-compliant request for Gemini. Returns plain text or "".
@@ -595,7 +597,7 @@ def call_gemini_v1(
 
     def _once(model_name: str):
         url = f"{url_base}/{model_name}:generateContent?key={GEMINI_API_KEY}"
-        r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=_timeout_s)
         try:
             body = r.json()
         except Exception:
@@ -603,7 +605,7 @@ def call_gemini_v1(
         return r.status_code, body, url
 
     # Exponential backoff on 503
-    attempts = 3
+    attempts = _max_retries
     delay = 1.5
     status, body, url = None, None, None
     for i in range(attempts):
