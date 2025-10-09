@@ -867,7 +867,7 @@ def upload_file():
             temperature=0.2,
             top_p=0.85,
             top_k=32,
-            max_tokens=700,
+            max_tokens=1000,
         )
         app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
     except Exception as e:
@@ -884,7 +884,7 @@ def upload_file():
                 temperature=0.2,
                 top_p=0.85,
                 top_k=32,
-                max_tokens=600,
+                max_tokens=800,
             )
             app.logger.info("AI retry call returned length=%s", len(ai_text or ""))
         except Exception as e:
