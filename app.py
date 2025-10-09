@@ -2,6 +2,7 @@
 # (1) Load → (2) read env vars → (3) use them
 
 import re
+import time
 import base64
 import json
 import os
@@ -122,7 +123,10 @@ def ai_status():
 def ai_smoke():
     try:
         txt = call_gemini_v1("Reply with: OK")
-        return {"ok": True, "got": txt[:40]}, 200
+        got = (txt or "").strip()
+        ok = got == "OK"
+        # 200 only when the check passes; 502 when model responded but not exactly "OK"
+        return ({"ok": ok, "got": got}, 200 if ok else 502)
     except Exception as e:
         return {"ok": False, "error": str(e)}, 500
 
@@ -538,9 +542,10 @@ def pct_filter(val):
 # --- 6) Call Gemini -------------------------------------------------------------
 
 # Uses the existing imports at the top: os, json, requests
-GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1")
+# GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Only need to define this (if not already defined once):
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
 
@@ -562,6 +567,7 @@ def call_gemini_v1(
     top_p: float = 0.9,
     top_k: int = 32,
     max_tokens: int = 800,
+    _model_override: str | None = None,
 ) -> str:
     """
     Minimal, v1-compliant request for Gemini. Returns plain text or "".
@@ -570,7 +576,9 @@ def call_gemini_v1(
         raise RuntimeError("GEMINI_API_KEY is not set")
 
     # v1 endpoint shape
-    url = f"{GEMINI_BASE}/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    model_to_use = (_model_override or GEMINI_MODEL).strip()
+    url_base = f"{GEMINI_BASE}/{GEMINI_API_VERSION}/models"
+    headers = {"Content-Type": "application/json"}
 
     # Hard-truncate very long prompts just in case
     safe_prompt = (prompt_text or "").encode("utf-8", "ignore").decode("utf-8")[:120_000].strip()
@@ -585,19 +593,42 @@ def call_gemini_v1(
         },
     }
 
-    headers = {"Content-Type": "application/json"}
-    r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
+    def _once(model_name: str):
+        url = f"{url_base}/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        try:
+            body = r.json()
+        except Exception:
+            body = {"_non_json_body": r.text}
+        return r.status_code, body, url
 
-    # Helpful diagnostics for Render logs if anything goes wrong
-    try:
-        body = r.json()
-    except Exception:
-        body = {"_non_json_body": r.text}
+    # Exponential backoff on 503
+    attempts = 3
+    delay = 1.5
+    status, body, url = None, None, None
+    for i in range(attempts):
+        status, body, url = _once(model_to_use)
+        if status != 503:
+            break
+        time.sleep(delay)
+        delay *= 2
 
-    if r.status_code != 200:
-        safe_url = _redact_url(url)
-        # include the redacted URL to help diagnose which model/version was hit
-        raise RuntimeError(f"Gemini {r.status_code} at {safe_url}: {json.dumps(body)[:2000]}")
+    if status == 503 and model_to_use != "gemini-2.5-flash":
+        # one-shot fallback to flash
+        status, body, url = _once("gemini-2.5-flash")
+
+    # One-shot fallback to flash if still overloaded
+    if status != 200:
+        raise RuntimeError(f"Gemini {status} at {_redact_url(url)}: {json.dumps(body)[:2000]}")
+
+    # Extract first text part
+    cands = body.get("candidates") or []
+    if not cands:
+        return ""
+    for p in cands[0].get("content", {}).get("parts", []):
+        if "text" in p:
+            return p["text"]
+    return ""
 
     # Extract first text part from v1 response
     cands = body.get("candidates") or []
@@ -842,7 +873,7 @@ def upload_file():
     except Exception as e:
         app.logger.warning("AI primary call failed: %s", e)
 
-    # 4) Fallback with fewer rows if still empty
+    # 3) Fallback with fewer rows if still empty
     if not ai_text or not ai_text.strip():
         SHORT_LINES = 60
         short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
@@ -859,7 +890,7 @@ def upload_file():
         except Exception as e:
             app.logger.warning("AI retry call failed: %s", e)
 
-    # 5) Final guarantee: never leave empty text for the template
+    # 4) Final guarantee: never leave empty text for the template
     if not ai_text or not ai_text.strip():
         ai_text = "(AI summary temporarily unavailable for this upload. Try a smaller file or fewer companies.)"
 
