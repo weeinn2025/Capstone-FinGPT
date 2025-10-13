@@ -948,6 +948,72 @@ def upload_file():
 
     metrics = compute_metrics(use_df) if has_canonical else pd.DataFrame()
 
+    # [NEW] ---- Build a compact ratios text block (last 5 years per company) and ask Gemini -------
+
+    if metrics is not None and not metrics.empty:
+        # sort by Company, Year so "last 5" is correct per company
+        m = metrics.sort_values(["Company", "Year"]).copy()
+
+        def _fmt_pct(x):
+            try:
+                x = float(x)
+            except Exception:
+                return "NaN"
+            if pd.isna(x):
+                return "NaN"
+            return f"{x:.1%}"
+
+        def _fmt_2(x):
+            try:
+                x = float(x)
+            except Exception:
+                return "NaN"
+            if pd.isna(x):
+                return "NaN"
+            return f"{x:.2f}"
+
+        lines_ratios = []
+        for comp, grp in m.groupby("Company", sort=False):
+            tail = grp.tail(5)  # ← last 5 years for this company (use 2 if you want it shorter)
+            for _, r in tail.iterrows():
+                y  = int(r.get("Year", 0)) if pd.notna(r.get("Year")) else ""
+                nm = _fmt_pct(r.get("net_margin"))
+                de = _fmt_2(r.get("debt_to_equity"))
+                da = _fmt_2(r.get("debt_to_assets"))
+                ry = _fmt_pct(r.get("rev_yoy"))
+                ny = _fmt_pct(r.get("ni_yoy"))
+                lines_ratios.append(
+                    f"{comp} {y} | margin={nm} | D/E={de} | D/A={da} | Rev YoY={ry} | NI YoY={ny}"
+                )
+
+        if lines_ratios:
+            ratios_prompt = (
+                "Based on these Tier-1 ratios, write 4–8 concise sentences that compare companies and highlight trends. "
+                "Call out improving/weakening margins, leverage levels (D/E, D/A), and momentum (YoY). "
+                "Be factual and avoid advice.\n"
+                + "\n".join(lines_ratios)
+            )
+            try:
+                ratios_text = call_gemini_v1(
+                    prompt_text=_clean_prompt(ratios_prompt, max_len=20000),
+                    temperature=0.25,
+                    top_p=0.9,
+                    top_k=32,
+                    max_tokens=900,   # give enough room so it doesn't truncate
+                ).strip()
+            except Exception as e:
+                ratios_text = ""
+                app.logger.warning("Ratios AI call failed: %s", e)
+
+            if ratios_text:
+                # append under a small heading so it reads well in UI/PDF
+                if ai_text and ai_text.strip():
+                    ai_text = ai_text.strip() + "\n\n— Ratios Focus —\n" + ratios_text
+                else:
+                    ai_text = "— Ratios Focus —\n" + ratios_text
+
+    # ---- continue with your existing render_template(...) exactly as before ----------------------
+
     return render_template(
         "result.html",
         summary=summary,
@@ -962,7 +1028,7 @@ def upload_file():
     )
 
 
-# ---- 7a) Preview route ---------------------------------------------------------
+# ---- 7a) Preview route ------------------------------------------------------------------------
 
 
 @app.post("/preview")
