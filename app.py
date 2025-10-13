@@ -976,22 +976,19 @@ def upload_file():
         for comp, grp in m.groupby("Company", sort=False):
             tail = grp.tail(5)  # ← last 5 years for this company (use 2 if you want it shorter)
             for _, r in tail.iterrows():
-                y  = int(r.get("Year", 0)) if pd.notna(r.get("Year")) else ""
+                y = int(r.get("Year", 0)) if pd.notna(r.get("Year")) else ""
                 nm = _fmt_pct(r.get("net_margin"))
                 de = _fmt_2(r.get("debt_to_equity"))
                 da = _fmt_2(r.get("debt_to_assets"))
                 ry = _fmt_pct(r.get("rev_yoy"))
                 ny = _fmt_pct(r.get("ni_yoy"))
-                lines_ratios.append(
-                    f"{comp} {y} | margin={nm} | D/E={de} | D/A={da} | Rev YoY={ry} | NI YoY={ny}"
-                )
+                lines_ratios.append(f"{comp} {y} | margin={nm} | D/E={de} | D/A={da} | Rev YoY={ry} | NI YoY={ny}")
 
         if lines_ratios:
             ratios_prompt = (
                 "Based on these Tier-1 ratios, write 4–8 concise sentences that compare companies and highlight trends. "
                 "Call out improving/weakening margins, leverage levels (D/E, D/A), and momentum (YoY). "
-                "Be factual and avoid advice.\n"
-                + "\n".join(lines_ratios)
+                "Be factual and avoid advice.\n" + "\n".join(lines_ratios)
             )
             try:
                 ratios_text = call_gemini_v1(
@@ -999,7 +996,7 @@ def upload_file():
                     temperature=0.25,
                     top_p=0.9,
                     top_k=32,
-                    max_tokens=900,   # give enough room so it doesn't truncate
+                    max_tokens=900,  # give enough room so it doesn't truncate
                 ).strip()
             except Exception as e:
                 ratios_text = ""
