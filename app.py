@@ -982,10 +982,9 @@ def upload_file():
                 da = _fmt_2(r.get("debt_to_assets"))
                 ry = _fmt_pct(r.get("rev_yoy"))
                 ny = _fmt_pct(r.get("ni_yoy"))
-                lines_ratios.append(
-                    f"{comp} {y} | margin={nm} | D/E={de} | "
-                    f"D/A={da} | Rev YoY={ry} | NI YoY={ny}"
-                )
+                s1 = f"{comp} {y} | margin={nm} | D/E={de} | "
+                s2 = f"D/A~{da} | Rev YoY={ry} | NI YoY={ny}"
+                lines_ratios.append(s1 + s2)
 
         if lines_ratios:
             ratios_prompt = (
