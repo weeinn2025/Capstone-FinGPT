@@ -988,9 +988,19 @@ def upload_file():
 
         if lines_ratios:
             ratios_prompt = (
-                "Based on these Tier-1 ratios, write 4–8 concise sentences to compare companies and highlight trends. "
-                "Call out improving/weakening margins, leverage levels (D/E, D/A), and momentum (YoY). "
-                "Be factual and avoid advice.\n" + "\n".join(lines_ratios)
+                "You are a financial analyst. Using ONLY the Tier-1 ratios below (last 5 years per company), "
+                "write a short section titled 'Ratios Focus' to APPEND after the general AI Analysis.\n"
+                "\n"
+                "Requirements:\n"
+                "• Begin each company paragraph with the company name in bold like **Apple Inc.**\n"
+                "• Write 1 compact paragraph (2–3 sentences) PER COMPANY.\n"
+                "• For each company, explicitly comment on: Liquidity (net margin trend), "
+                "  Leverage (direction/level of D/E and D/A), and momentum (Rev YoY and NI YoY).\n"
+                "• Use verbs like improved/softened/stable/eased/rose/fell; be factual, no advice, "
+                "  no forecasts, no numbers not shown.\n"
+                "• Keep the whole section about 6–10 sentences total. Keep it concise and readable.\n"
+                "\n"
+                "Data (company-year rows):\n" + "\n".join(lines_ratios)
             )
             try:
                 ratios_text = call_gemini_v1(
@@ -1005,11 +1015,9 @@ def upload_file():
                 app.logger.warning("Ratios AI call failed: %s", e)
 
             if ratios_text:
-                # append under a small heading so it reads well in UI/PDF
-                if ai_text and ai_text.strip():
-                    ai_text = ai_text.strip() + "\n\n— Ratios Focus —\n" + ratios_text
-                else:
-                    ai_text = "— Ratios Focus —\n" + ratios_text
+                ratios_text = ratios_text.strip()
+            else:
+                ratios_text = ""
 
     # ---- continue with your existing render_template(...) exactly as before ----------------------
 
@@ -1017,6 +1025,7 @@ def upload_file():
         "result.html",
         summary=summary,
         ai_text=ai_text,
+        ratios_text=ratios_text,  # ← add this
         chart_data=chart_data,
         fig_json=fig_json,
         years=years,
