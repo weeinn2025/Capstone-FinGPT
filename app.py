@@ -996,7 +996,8 @@ def upload_file():
                 "• Write 1 compact paragraph (2–3 sentences) PER COMPANY.\n"
                 "• For each company, explicitly comment on: Liquidity (net margin trend), "
                 "  Leverage (direction/level of D/E and D/A), and momentum (Rev YoY and NI YoY).\n"
-                "• Use verbs like improved/softened/stable/eased/rose/fell; be factual, no advice, no forecasts, no numbers not shown.\n"
+                "• Use verbs like improved/softened/stable/eased/rose/fell; be factual, no advice, "
+                "  no forecasts, no numbers not shown.\n"
                 "• Keep the whole section about 6–10 sentences total. Keep it concise and readable.\n"
                 "\n"
                 "Data (company-year rows):\n" + "\n".join(lines_ratios)
