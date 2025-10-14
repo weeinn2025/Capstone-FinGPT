@@ -98,6 +98,11 @@
     <div class="ai-summary">
       <h3>AI Analysis</h3>
       <p>{{ ai_text }}</p>
+
+      {% if ratios_text %}
+        <h4>— Ratios Focus —</h4>
+        <p>{{ ratios_text }}</p>
+      {% endif %}
     </div>
  
   {% else %}
