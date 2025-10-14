@@ -96,6 +96,11 @@
       <h3>AI Analysis</h3>
       <p>{{ ai_text }}</p>
       
+      {% if ratios_text %}
+        <h4>— Ratios Focus —</h4>
+        <p>{{ ratios_text }}</p>
+      {% endif %}
+      
       {# ——— Tier-1 Ratios & Alerts ——— #}
       {% if metrics is defined and not metrics.empty %}
       <div class="metrics-wrap">
@@ -181,7 +186,8 @@
     <form method="post" action="{{ url_for('download_pdf') }}">      
       <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
       <!-- ai_text is just plain text -->
-      <input type="hidden" name="ai_text"   value="{{ ai_text }}">
+      <input type="hidden" name="ai_text"     value="{{ ai_text }}">
+      <input type="hidden" name="ratios_text" value="{{ ratios_text or '' }}">
       <!-- latest-year bars (already there) -->
       <input type="hidden" name="chart_data" value="{{ chart_data }}">
       <!-- NEW: all-years line chart - ship the chart PNG as a base64 string --> 
