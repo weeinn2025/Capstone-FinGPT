@@ -3,6 +3,8 @@
 
 import re
 import time
+import random
+import hashlib
 import base64
 import json
 import os
@@ -74,6 +76,9 @@ if not GEMINI_URL:
     GEMINI_URL = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{GEMINI_MODEL}:generateContent"
 # Consider Gemini available if we at least have a key (URL is auto-built above)
 GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
+
+# How many years per company to send to the AI (prompt size control)
+AI_YEARS_PER_COMPANY = int(os.getenv("AI_YEARS_PER_COMPANY", "5"))  # default 5
 
 # ---- 3) Flask app setup ---------------------------------------------------
 
@@ -549,6 +554,30 @@ def pct_filter(val):
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
 
+# --- ultra-light LRU-ish cache (per-process, expires ~1 hour) ----------
+_AI_CACHE: dict[str, tuple[float, str]] = {}
+_AI_CACHE_TTL = 3600.0  # seconds
+_AI_CACHE_MAX = 50
+
+
+def _ai_cache_get(key: str) -> str | None:
+    t_v = _AI_CACHE.get(key)
+    if not t_v:
+        return None
+    ts, val = t_v
+    if (time.time() - ts) > _AI_CACHE_TTL:
+        _AI_CACHE.pop(key, None)
+        return None
+    return val
+
+
+def _ai_cache_put(key: str, val: str) -> None:
+    # drop oldest if over capacity
+    if len(_AI_CACHE) >= _AI_CACHE_MAX:
+        _AI_CACHE.pop(next(iter(_AI_CACHE)))
+    _AI_CACHE[key] = (time.time(), val)
+
+
 def _redact_url(s: str) -> str:
     """Scrub any '?key=' or '&key=' query value from a URL string."""
     return re.sub(r'([?&]key=)[^&]+', r'\1REDACTED', s or "")
@@ -568,8 +597,10 @@ def call_gemini_v1(
     top_k: int = 32,
     max_tokens: int = 1000,
     _model_override: str | None = None,
-    _timeout_s: int = 45,  # NEW: use in requests.post timeout (was hardcoded 60)
-    _max_retries: int = 4,  # NEW: was fixed at 3
+    # ↑ (B) raise request timeout to handle cold starts / model latency
+    _timeout_s: int = 60,
+    # ↑ (C) stronger retry budget
+    _max_retries: int = 5,
 ) -> str:
     """
     Minimal, v1-compliant request for Gemini. Returns plain text or "".
@@ -604,19 +635,20 @@ def call_gemini_v1(
             body = {"_non_json_body": r.text}
         return r.status_code, body, url
 
-    # Exponential backoff on 503
+    # (C) Exponential backoff with jitter on 429/503 (rate-limit/overload)
     attempts = _max_retries
-    delay = 1.5
+    backoff = 1.5
     status, body, url = None, None, None
     for i in range(attempts):
         status, body, url = _once(model_to_use)
-        if status != 503:
+        if status == 200 or status not in (429, 503):
             break
-        time.sleep(delay)
-        delay *= 2
+        # sleep with jitter; cap at ~20s per try
+        time.sleep(min(20.0, backoff * (1.0 + random.random())))
+        backoff *= 2.0
 
-    if status == 503 and model_to_use != "gemini-2.5-flash":
-        # one-shot fallback to flash
+    # one-shot fallback to flash if still overloaded
+    if status in (429, 503) and model_to_use != "gemini-2.5-flash":
         status, body, url = _once("gemini-2.5-flash")
 
     # One-shot fallback to flash if still overloaded
@@ -839,45 +871,61 @@ def upload_file():
         .sort_values(["Company", "Year", "LI_CANON"])
     )
 
-    # --- AI insight ---------------------------------------------------------
-    # Build the prompt lines
-
+    # --- AI insight (General summary) ---------------------------------------------------------
+    # Auto-scale years sent to the model (reduces overload with many companies)
+    company_count = ai_df["Company"].nunique() if not ai_df.empty else 1
+    years_keep = AI_YEARS_PER_COMPANY if company_count <= 2 else min(3, AI_YEARS_PER_COMPANY)
+    # Keep {years_keep} years PER COMPANY of Rev/NI
     lines = []
-    for (comp, yr), grp in ai_df.groupby(["Company", "Year"]):
-        rev = grp.loc[grp["LI_CANON"] == "Revenue", "Value"].sum()
-        ni = grp.loc[grp["LI_CANON"] == "Net income", "Value"].sum()
-        lines.append(f"{comp} {int(yr)} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
+    if not ai_df.empty:
+        _tmp = ai_df.sort_values(["Company", "Year"])
+        for comp, g in _tmp.groupby("Company", sort=False):
+            # build Revenue/Net income pairs per year
+            gg = (
+                g.pivot_table(index="Year", columns="LI_CANON", values="Value", aggfunc="sum")
+                .reset_index()
+                .sort_values("Year")
+            ).tail(years_keep)
+            for _, row in gg.iterrows():
+                yr = int(row.get("Year", 0)) if pd.notna(row.get("Year")) else ""
+                rev = float(row.get("Revenue", 0) or 0)
+                ni = float(row.get("Net income", 0) or 0)
+                lines.append(f"{comp} {yr} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
-    # Keep prompt modest to avoid empty responses
-    MAX_LINES = 300
-    if len(lines) > MAX_LINES:
-        lines = lines[-MAX_LINES:]
+    # Slightly raise overall cap since we now include more years
+    if len(lines) > 200:
+        lines = lines[-200:]
 
-    # 1) Build the prompt FIRST
+    # compact prompt (D: hard trim)
     prompt = (
-        "You are a financial analyst. Summarize multi-year performance in 3–5 sentences. "
-        "Focus on growth/decline and rough margins across years; do not invent data.\n" + "\n".join(lines)
+        "You are a financial analyst. Summarize multi-year performance across the companies in 5-6 sentences total. "
+        "Comment on growth/decline and rough margins only; do not invent data.\n" + "\n".join(lines)
     )
 
-    # 2) Keep the prompt reasonably short (prevents empty responses on very large CSVs)
-    prompt = _clean_prompt(prompt, max_len=8000)
+    # Allow a bit more room for 5-year inputs
+    prompt = _clean_prompt(prompt, max_len=9000)
 
-    ai_text = ""
-    try:
-        ai_text = call_gemini_v1(
-            prompt_text=prompt,
-            temperature=0.2,
-            top_p=0.85,
-            top_k=32,
-            max_tokens=1000,
-        )
-        app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
-    except Exception as e:
-        app.logger.warning("AI primary call failed: %s", e)
+    # cache key for this prompt+model
+    _k1 = hashlib.sha1((GEMINI_MODEL + "|" + prompt).encode("utf-8")).hexdigest()
+    ai_text = _ai_cache_get(_k1) or ""
+    if not ai_text:
+        try:
+            ai_text = call_gemini_v1(
+                prompt_text=prompt,
+                temperature=0.2,
+                top_p=0.85,
+                top_k=32,
+                max_tokens=1000,
+            )
+            _ai_cache_put(_k1, ai_text or "")
+            app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
+        except Exception as e:
+            app.logger.warning("AI primary call failed: %s", e)
 
     # 3) Fallback with fewer rows if still empty
     if not ai_text or not ai_text.strip():
-        SHORT_LINES = 60
+        # Retry with a small slice; 50 keeps some cross-year signal for 5y/company
+        SHORT_LINES = 50
         short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
         retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
         try:
@@ -953,6 +1001,9 @@ def upload_file():
     if metrics is not None and not metrics.empty:
         # sort by Company, Year so "last 5" is correct per company
         m = metrics.sort_values(["Company", "Year"]).copy()
+        # Auto-scale for ratios as well
+        company_count2 = m["Company"].nunique() if not m.empty else 1
+        years_keep_ratios = AI_YEARS_PER_COMPANY if company_count2 <= 2 else min(3, AI_YEARS_PER_COMPANY)
 
         def _fmt_pct(x):
             try:
@@ -974,7 +1025,7 @@ def upload_file():
 
         lines_ratios = []
         for comp, grp in m.groupby("Company", sort=False):
-            tail = grp.tail(5)  # ← last 5 years for this company (use 2 if you want it shorter)
+            tail = grp.tail(years_keep_ratios)
             for _, r in tail.iterrows():
                 y = int(r.get("Year", 0)) if pd.notna(r.get("Year")) else ""
                 nm = _fmt_pct(r.get("net_margin"))
