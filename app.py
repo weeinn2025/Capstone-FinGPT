@@ -971,10 +971,10 @@ def upload_file():
                     y0, y1 = years.min(), years.max()
                     rev0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
                     rev1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
-                    ni0  = g[(g["Year"] == y0) & (g["LI_CANON"] == "Net income")]["Value"].sum()
-                    ni1  = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
+                    ni0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Net income")]["Value"].sum()
+                    ni1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
                     rev_trend = "higher" if rev1 >= rev0 else "lower"
-                    ni_trend  = "higher" if ni1 >= ni0 else "lower"
+                    ni_trend = "higher" if ni1 >= ni0 else "lower"
                     bullets.append(f"**{comp}.** Revenue {rev_trend} vs {y0}; Net income {ni_trend} by {y1}.")
             ai_text = " ".join(bullets) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
         except Exception as e:
