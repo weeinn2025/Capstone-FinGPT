@@ -872,7 +872,7 @@ def upload_file():
     )
 
     # --- AI insight (General summary) ---------------------------------------------------------
-    # Auto-scale years sent to the model (reduces overload with many companies)
+    # 1) Auto-scale years sent to the model (reduces overload with many companies)
     company_count = ai_df["Company"].nunique() if not ai_df.empty else 1
     years_keep = AI_YEARS_PER_COMPANY if company_count <= 2 else min(3, AI_YEARS_PER_COMPANY)
     # Keep {years_keep} years PER COMPANY of Rev/NI
@@ -896,7 +896,7 @@ def upload_file():
     if len(lines) > 200:
         lines = lines[-200:]
 
-    # compact prompt (D: hard trim)
+    # 2) Compact prompt (D: hard trim)
     prompt = (
         "You are a financial analyst. Summarize multi-year performance across the companies in 5-6 sentences total. "
         "Comment on growth/decline and rough margins only; do not invent data.\n" + "\n".join(lines)
@@ -905,7 +905,7 @@ def upload_file():
     # Allow a bit more room for 5-year inputs
     prompt = _clean_prompt(prompt, max_len=9000)
 
-    # cache key for this prompt+model
+    # Cache key for this prompt+model
     _k1 = hashlib.sha1((GEMINI_MODEL + "|" + prompt).encode("utf-8")).hexdigest()
     ai_text = _ai_cache_get(_k1) or ""
     if not ai_text:
@@ -922,7 +922,7 @@ def upload_file():
         except Exception as e:
             app.logger.warning("AI primary call failed: %s", e)
 
-    # 3) Fallback with fewer rows if still empty
+    # 3a) Fallback with fewer rows if still empty
     if not ai_text or not ai_text.strip():
         # Retry with a small slice; 50 keeps some cross-year signal for 5y/company
         SHORT_LINES = 50
@@ -940,9 +940,46 @@ def upload_file():
         except Exception as e:
             app.logger.warning("AI retry call failed: %s", e)
 
-    # 4) Final guarantee: never leave empty text for the template
+    # 3b) Ultra-short fallback: tiny prompt + smaller output
     if not ai_text or not ai_text.strip():
-        ai_text = "(AI summary temporarily unavailable for this upload. Try a smaller file or fewer companies.)"
+        short_lines = lines[-20:] if len(lines) > 20 else lines
+        short_prompt = (
+            "In 2–3 sentences, state the two biggest trends across the companies. "
+            "No advice, no invented numbers.\n" + "\n".join(short_lines)
+        )
+        try:
+            ai_text = call_gemini_v1(
+                prompt_text=_clean_prompt(short_prompt, max_len=2000),
+                temperature=0.15,
+                top_p=0.85,
+                top_k=32,
+                max_tokens=350,
+            )
+        except Exception as e:
+            app.logger.warning("AI ultra-short fallback failed: %s", e)
+
+    # 4) Final guarantee: synthesize a tiny, deterministic summary if still empty
+    if not ai_text or not ai_text.strip():
+        try:
+            bullets = []
+            if not ai_df.empty:
+                _t = ai_df.sort_values(["Company", "Year"])
+                for comp, g in _t.groupby("Company", sort=False):
+                    years = g["Year"].dropna().astype(int)
+                    if years.empty:
+                        continue
+                    y0, y1 = years.min(), years.max()
+                    rev0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
+                    rev1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
+                    ni0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Net income")]["Value"].sum()
+                    ni1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
+                    rev_trend = "higher" if rev1 >= rev0 else "lower"
+                    ni_trend = "higher" if ni1 >= ni0 else "lower"
+                    bullets.append(f"**{comp}.** Revenue {rev_trend} vs {y0}; Net income {ni_trend} by {y1}.")
+            ai_text = " ".join(bullets) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
+        except Exception as e:
+            app.logger.warning("Rule-based summary failed: %s", e)
+            ai_text = "(No AI summary due to an unexpected error.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
