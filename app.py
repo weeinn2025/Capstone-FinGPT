@@ -883,13 +883,13 @@ def upload_file():
             # build Revenue/Net income pairs per year
             gg = (
                 g.pivot_table(index="Year", columns="LI_CANON", values="Value", aggfunc="sum")
-                 .reset_index()
-                 .sort_values("Year")
+                .reset_index()
+                .sort_values("Year")
             ).tail(years_keep)
             for _, row in gg.iterrows():
-                yr  = int(row.get("Year", 0)) if pd.notna(row.get("Year")) else ""
+                yr = int(row.get("Year", 0)) if pd.notna(row.get("Year")) else ""
                 rev = float(row.get("Revenue", 0) or 0)
-                ni  = float(row.get("Net income", 0) or 0)
+                ni = float(row.get("Net income", 0) or 0)
                 lines.append(f"{comp} {yr} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
     # Slightly raise overall cap since we now include more years
@@ -899,8 +899,7 @@ def upload_file():
     # compact prompt (D: hard trim)
     prompt = (
         "You are a financial analyst. Summarize multi-year performance across the companies in 5-6 sentences total. "
-        "Comment on growth/decline and rough margins only; do not invent data.\n"
-        + "\n".join(lines)
+        "Comment on growth/decline and rough margins only; do not invent data.\n" + "\n".join(lines)
     )
 
     # Allow a bit more room for 5-year inputs
