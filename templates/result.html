@@ -16,15 +16,15 @@
     .metrics-table th, .metrics-table td { border: 1px solid #ccc; padding: 6px; text-align: right; }
     .metrics-table th { background: #f6f7f9; }
     .metrics-table td.left, .metrics-table th.left { text-align: left; }
-    
+
     /* alert dots */
     .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
     .dot.green { background:#16a34a; }
     .dot.red   { background:#dc2626; }
     .dot.gray  { background:#9ca3af; }   /* <- add this - neutral gray for not available */
-    
+
     .na { color:#777; font-style: italic; }  /* keep this for other places */
-  
+
     /* Legend + buttons spacing */
     .legend{
       display: inline-flex;            /* nice horizontal layout */
@@ -94,13 +94,13 @@
   {% if ai_text %}
     <div class="ai-summary">
       <h3>AI Analysis</h3>
-      <p>{{ ai_text }}</p>
-      
+      <div class="prose" style="white-space:pre-wrap">{{ ai_text }}</div>
+
       {% if ratios_text %}
         <h4>— Ratios Focus —</h4>
-        <p>{{ ratios_text }}</p>
+        <div class="prose" style="white-space:pre-wrap">{{ ratios_text }}</div>
       {% endif %}
-      
+
       {# ——— Tier-1 Ratios & Alerts ——— #}
       {% if metrics is defined and not metrics.empty %}
       <div class="metrics-wrap">
@@ -186,8 +186,8 @@
     <form method="post" action="{{ url_for('download_pdf') }}">      
       <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
       <!-- ai_text is just plain text -->
-      <input type="hidden" name="ai_text"     value="{{ ai_text }}">
-      <input type="hidden" name="ratios_text" value="{{ ratios_text or '' }}">
+      <textarea name="ai_text" hidden>{{ ai_text }}</textarea>
+      <textarea name="ratios_text" hidden>{{ ratios_text or '' }}</textarea>
       <!-- latest-year bars (already there) -->
       <input type="hidden" name="chart_data" value="{{ chart_data }}">
       <!-- NEW: all-years line chart - ship the chart PNG as a base64 string --> 
@@ -202,7 +202,7 @@
     </form>
   </div>  {# <-- close .actions div #}
 
-  
+
   {# ——— Financial Chart ——— #}
   {% if fig_json %}
     <section style="margin-top:1.5em;">
@@ -217,7 +217,7 @@
 
       <!-- single chart container -->
       <div id="plotly-chart" style="width:100%;max-width:1000px;height:420px;"></div>
-      
+
       <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
         <em>Data disclaimer:</em> This demo uses sample/illustrative figures and may mix
         calendar-year and fiscal-year periods across companies. Values are simplified
@@ -248,8 +248,8 @@
         Plotly.newPlot('plotly-chart', initialFig.data, initialFig.layout || {}, {
           responsive: true, displaylogo: false });
       }
-    
-      
+
+
       // Populate year selector (include "All years" if available)
       const yearSel = document.getElementById('year-select');
       if (figAll) {
@@ -257,7 +257,7 @@
         opt.value = '__ALL__';
         opt.textContent = 'All years';
         yearSel.appendChild(opt);
-        
+
         // NEW: default to All years and render it now
         yearSel.value = '__ALL__';
       }        
