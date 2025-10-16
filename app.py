@@ -605,10 +605,10 @@ def _postprocess_ai_text(s: str) -> str:
 
     # If it doesn’t end with sentence punctuation but contains at least one sentence end,
     # clip to the last complete sentence.
-    last_dot  = s.rfind(".")
+    last_dot = s.rfind(".")
     last_bang = s.rfind("!")
-    last_q    = s.rfind("?")
-    last_end  = max(last_dot, last_bang, last_q)
+    last_q = s.rfind("?")
+    last_end = max(last_dot, last_bang, last_q)
     if not _SENT_END_RE.search(s) and last_end >= 50:
         s = s[: last_end + 1].rstrip()
 
