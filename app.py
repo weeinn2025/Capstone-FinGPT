@@ -590,6 +590,35 @@ def _clean_prompt(text: str | None, max_len: int = 120_000) -> str:
     return text.encode("utf-8", "ignore").decode("utf-8")[:max_len].strip()
 
 
+# Heuristic: tidy, clip to last full sentence, ensure sentence-ending punctuation
+_SENT_END_RE = re.compile(r'[.!?]["\')\]]*$')
+
+
+def _postprocess_ai_text(s: str) -> str:
+    s = (s or "").strip()
+    if not s:
+        return ""
+    # keep newlines, but collapse repeated spaces/tabs
+    s = re.sub(r'[ \t]+', ' ', s)
+    # drop leading bullets/dashes
+    s = re.sub(r'^[-•\s]+', '', s)
+
+    # If it doesn’t end with sentence punctuation but contains at least one sentence end,
+    # clip to the last complete sentence.
+    last_dot = s.rfind(".")
+    last_bang = s.rfind("!")
+    last_q = s.rfind("?")
+    last_end = max(last_dot, last_bang, last_q)
+    if not _SENT_END_RE.search(s) and last_end >= 50:
+        s = s[: last_end + 1].rstrip()
+
+    # If we still don’t end with punctuation, add a period.
+    if s and not _SENT_END_RE.search(s):
+        s += "."
+
+    return s
+
+
 def call_gemini_v1(
     prompt_text: str,
     temperature: float = 0.2,
@@ -919,6 +948,11 @@ def upload_file():
             )
             _ai_cache_put(_k1, ai_text or "")
             app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
+
+            # >>> add these three lines <<<
+            ai_text = _postprocess_ai_text(ai_text)
+            if len(ai_text) < 40 or ai_text.count(" ") < 6:
+                ai_text = ""
         except Exception as e:
             app.logger.warning("AI primary call failed: %s", e)
 
@@ -1102,9 +1136,10 @@ def upload_file():
                 ratios_text = ""
                 app.logger.warning("Ratios AI call failed: %s", e)
 
-            if ratios_text:
-                ratios_text = ratios_text.strip()
-            else:
+            # >>> add this normalization guard <<<
+            ratios_text = _postprocess_ai_text(ratios_text)
+            if len(ratios_text) < 40 or ratios_text.count(" ") < 6:
+                # treat as likely fragment → suppress so template won't show junk
                 ratios_text = ""
 
     # ---- continue with your existing render_template(...) exactly as before ----------------------
