@@ -926,8 +926,8 @@ def upload_file():
                 lines.append(f"{comp} {yr} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
     # Slightly raise overall cap since we now include more years
-    if len(lines) > 200:
-        lines = lines[-200:]
+    if len(lines) > 260:
+        lines = lines[-260:]
 
     # 2) Stronger prompt (keeps output consistent and multi-paragraph)
     prompt = (
@@ -951,20 +951,33 @@ def upload_file():
 
     if not ai_text:
         try:
+            # Stronger prompt guarantees separate paragraphs per company.
+            prompt = (
+                "You are a financial analyst. Using ONLY the rows below, write a concise yet complete summary.\n\n"
+                f"Cover the last {years_keep} years for each company.\n\n"
+                "Formatting requirements:\n"
+                "• Use a separate paragraph per company, beginning with the company name in bold like **Apple Inc.**\n"
+                "• Write 2–4 sentences per company. Do not collapse companies into one paragraph.\n"
+                "• Focus on revenue, net income, and margin direction (rose/fell/improved/softened/stable).\n"
+                "• No forecasts or advice. No new numbers beyond the table. End each paragraph with a period.\n\n"
+                "Data (company-year rows):\n" + "\n".join(lines)
+            )
             ai_text = call_gemini_v1(
-                prompt_text=prompt,
-                temperature=0.15,  # lower randomness → more consistent paragraphs
-                top_p=0.85,
+                prompt_text=_clean_prompt(prompt, max_len=12000),
+                temperature=0.2,  # lower randomness → more consistent paragraphs
+                top_p=0.9,
                 top_k=32,
-                max_tokens=1100,  # bigger budget for multi-paragraph output
-                _model_override=MODEL_MAIN,  # force pro; your function still falls back to flash on 429/503
+                max_tokens=1400,  # ↑ more room for multi-paragraph output
+                _model_override=MODEL_MAIN,  # force pro; function still falls back to flash on 429/503
+                _timeout_s=90,  # ↑ give pro more time
+                _max_retries=6,  # ↑ retry budget
             )
             _ai_cache_put(_k1, ai_text or "")
             app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
 
-            # Normalize & lightly guard fragments (keep this gentle for the MAIN summary)
+            # Gentle post-processing (no aggressive clipping)
             ai_text = _postprocess_ai_text(ai_text)
-            if len(ai_text) < 30 or ai_text.count(" ") < 5:
+            if len(ai_text) < 60 or ai_text.count(" ") < 10:
                 ai_text = ""
         except Exception as e:
             app.logger.warning("AI primary call failed: %s", e)
@@ -1000,7 +1013,7 @@ def upload_file():
                 temperature=0.15,
                 top_p=0.85,
                 top_k=32,
-                max_tokens=350,
+                max_tokens=420,
                 _model_override="gemini-2.5-flash",  # keep this tiny and fast
             )
             ai_text = _postprocess_ai_text(ai_text)
@@ -1131,17 +1144,13 @@ def upload_file():
         if lines_ratios:
             ratios_prompt = (
                 "You are a financial analyst. Using ONLY the Tier-1 ratios below (last 5 years per company), "
-                "write a short section titled 'Ratios Focus' to APPEND after the general AI Analysis.\n"
-                "\n"
-                "Requirements:\n"
+                "write a short section titled 'Ratios Focus' to APPEND after the general AI Analysis.\n\n"
+                "Formatting:\n"
                 "• Begin each company paragraph with the company name in bold like **Apple Inc.**\n"
-                "• Write 1 compact paragraph (2–3 sentences) PER COMPANY.\n"
-                "• For each company, explicitly comment on: Liquidity (net margin trend), "
-                "  Leverage (direction/level of D/E and D/A), and momentum (Rev YoY and NI YoY).\n"
-                "• Use verbs like improved/softened/stable/eased/rose/fell; be factual, no advice, "
-                "  no forecasts, no numbers not shown.\n"
-                "• Keep the whole section about 6–10 sentences total. Keep it concise and readable.\n"
-                "\n"
+                "• Write 2–3 sentences PER COMPANY (compact but substantive).\n"
+                "• Address clearly: Liquidity (net margin trend), Leverage (level/direction of D/E and D/A), "
+                "  Momentum (Rev YoY and NI YoY). Use verbs like improved/softened/stable/eased/rose/fell.\n"
+                "• No advice, no forecasts, no numbers not shown; end each paragraph with a period.\n\n"
                 "Data (company-year rows):\n" + "\n".join(lines_ratios)
             )
             try:
@@ -1157,12 +1166,27 @@ def upload_file():
                 ratios_text = ""
                 app.logger.warning("Ratios AI call failed: %s", e)
 
-            # normalize & lightly guard fragments (gentle for ratios)
+            # normalize & gentle guard
             ratios_text = _postprocess_ai_text(ratios_text)
             if len(ratios_text) < 30 or ratios_text.count(" ") < 5:
-                ratios_text = ""
+                # Fallback: deterministic bullets so something always renders
+                try:
+                    bullets = []
+                    for comp, grp in m.groupby("Company", sort=False):
+                        tail = grp.tail(years_keep_ratios)
+                        nm_trend = "improved" if (tail["net_margin"].diff().mean(skipna=True) or 0) > 0 else "softened"
+                        de_mean = tail["debt_to_equity"].mean(skipna=True)
+                        da_mean = tail["debt_to_assets"].mean(skipna=True)
+                        ry_mean = tail["rev_yoy"].mean(skipna=True)
+                        ny_mean = tail["ni_yoy"].mean(skipna=True)
+                        bullets.append(
+                            f"**{comp}.** Liquidity {nm_trend}; leverage at D/E≈{de_mean:.2f}, D/A≈{da_mean:.2f}; "
+                            f"momentum Rev YoY≈{ry_mean:.1%}, NI YoY≈{ny_mean:.1%}."
+                        )
+                    ratios_text = " ".join(bullets)
+                except Exception:
+                    ratios_text = ""
             else:
-                # small touch: ensure it ends cleanly
                 if not ratios_text.endswith(('.', '!', '?')):
                     ratios_text += '.'
             # (optional) debug
