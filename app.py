@@ -1042,7 +1042,7 @@ def upload_file():
     chart_data_all = None  # all-years PNG for PDF (optional)
 
     # NEW: always define, so template render is safe even if we skip ratios block
-    ratios_text = ""   # <--- ADD THIS LINE
+    ratios_text = ""  # <--- ADD THIS LINE
 
     has_canonical = needed.issubset(use_df.columns)
 
