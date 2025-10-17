@@ -950,10 +950,10 @@ def upload_file():
         try:
             ai_text = call_gemini_v1(
                 prompt_text=prompt,
-                temperature=0.15,    # lower randomness → more consistent paragraphs
+                temperature=0.15,  # lower randomness → more consistent paragraphs
                 top_p=0.85,
                 top_k=32,
-                max_tokens=1100,     # bigger budget for multi-paragraph output
+                max_tokens=1100,  # bigger budget for multi-paragraph output
                 _model_override=MODEL_MAIN,  # force pro; your function still falls back to flash on 429/503
             )
             _ai_cache_put(_k1, ai_text or "")
