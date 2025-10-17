@@ -598,10 +598,9 @@ def _postprocess_ai_text(s: str) -> str:
     s = (s or "").strip()
     if not s:
         return ""
-    # keep newlines, but collapse repeated spaces/tabs
-    s = re.sub(r'[ \t]+', ' ', s)
-    # drop leading bullets/dashes
-    s = re.sub(r'^[-•\s]+', '', s)
+
+    s = re.sub(r'[ \t]+', ' ', s)  # keep newlines, but collapse repeated spaces/tabs
+    s = re.sub(r'^[-•\s]+', '', s)  # drop leading bullets/dashes
 
     # If it doesn’t end with sentence punctuation but contains at least one sentence end,
     # clip to the last complete sentence.
@@ -609,10 +608,14 @@ def _postprocess_ai_text(s: str) -> str:
     last_bang = s.rfind("!")
     last_q = s.rfind("?")
     last_end = max(last_dot, last_bang, last_q)
+
+    # If we don't end with punctuation, but we *do* have a prior sentence end,
+    # clip to that full sentence (no arbitrary 50-char threshold).
     if not _SENT_END_RE.search(s) and last_end >= 50:
         s = s[: last_end + 1].rstrip()
 
-    # If we still don’t end with punctuation, add a period.
+    # If we *still* don't end cleanly, trim trailing hyphen/dash and add a period.
+    s = re.sub(r'[-–—]\s*$', '', s)  # remove trailing hyphen fragments
     if s and not _SENT_END_RE.search(s):
         s += "."
 
@@ -1037,6 +1040,9 @@ def upload_file():
     figs_by_year_json = "{}"  # per-year figures for client switching
     fig_all_json = "null"  # all-years line chart (Plotly JSON)
     chart_data_all = None  # all-years PNG for PDF (optional)
+
+    # NEW: always define, so template render is safe even if we skip ratios block
+    ratios_text = ""   # <--- ADD THIS LINE
 
     has_canonical = needed.issubset(use_df.columns)
 
