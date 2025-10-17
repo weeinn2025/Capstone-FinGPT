@@ -904,6 +904,7 @@ def upload_file():
     # 1) Auto-scale years sent to the model (reduces overload with many companies)
     company_count = ai_df["Company"].nunique() if not ai_df.empty else 1
     years_keep = AI_YEARS_PER_COMPANY if company_count <= 2 else min(3, AI_YEARS_PER_COMPANY)
+
     # Keep {years_keep} years PER COMPANY of Rev/NI
     lines = []
     if not ai_df.empty:
@@ -925,33 +926,42 @@ def upload_file():
     if len(lines) > 200:
         lines = lines[-200:]
 
-    # 2) Compact prompt (D: hard trim)
+    # 2) Stronger prompt (keeps output consistent and multi-paragraph)
     prompt = (
-        "You are a financial analyst. Summarize multi-year performance across the companies in 5-6 sentences total. "
-        "Comment on growth/decline and rough margins only; do not invent data.\n" + "\n".join(lines)
+        "You are a financial analyst. Write a concise multi-paragraph summary using ONLY the rows below.\n\n"
+        f"Cover the last {years_keep} years for each company.\n\n"
+        "Requirements:\n"
+        "• Write one short paragraph (2–3 sentences) per company.\n"
+        "• Focus on growth/decline in Revenue and Net income, and margin direction.\n"
+        "• Use clear verbs (rose/fell/improved/softened/stable). No forecasts, no advice, no invented data.\n"
+        "• Do not introduce new numbers beyond the table. End each paragraph with a period.\n\n"
+        "Data (company-year rows):\n" + "\n".join(lines)
     )
 
-    # Allow a bit more room for 5-year inputs
-    prompt = _clean_prompt(prompt, max_len=9000)
+    # Allow a bit more room for 5-year inputs and clean the text
+    prompt = _clean_prompt(prompt, max_len=12000)
 
-    # Cache key for this prompt+model
-    _k1 = hashlib.sha1((GEMINI_MODEL + "|" + prompt).encode("utf-8")).hexdigest()
+    # Force pro for richer output; include the model in the cache key
+    MODEL_MAIN = "gemini-2.5-pro"
+    _k1 = hashlib.sha1((MODEL_MAIN + "|" + prompt).encode("utf-8")).hexdigest()
     ai_text = _ai_cache_get(_k1) or ""
+
     if not ai_text:
         try:
             ai_text = call_gemini_v1(
                 prompt_text=prompt,
-                temperature=0.2,
+                temperature=0.15,    # lower randomness → more consistent paragraphs
                 top_p=0.85,
                 top_k=32,
-                max_tokens=1000,
+                max_tokens=1100,     # bigger budget for multi-paragraph output
+                _model_override=MODEL_MAIN,  # force pro; your function still falls back to flash on 429/503
             )
             _ai_cache_put(_k1, ai_text or "")
             app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
 
-            # >>> add these three lines <<<
+            # Normalize & lightly guard fragments (keep this gentle for the MAIN summary)
             ai_text = _postprocess_ai_text(ai_text)
-            if len(ai_text) < 40 or ai_text.count(" ") < 6:
+            if len(ai_text) < 30 or ai_text.count(" ") < 5:
                 ai_text = ""
         except Exception as e:
             app.logger.warning("AI primary call failed: %s", e)
@@ -988,7 +998,11 @@ def upload_file():
                 top_p=0.85,
                 top_k=32,
                 max_tokens=350,
+                _model_override="gemini-2.5-flash",  # keep this tiny and fast
             )
+            ai_text = _postprocess_ai_text(ai_text)
+            if len(ai_text) < 30 or ai_text.count(" ") < 5:
+                ai_text = ""
         except Exception as e:
             app.logger.warning("AI ultra-short fallback failed: %s", e)
 
