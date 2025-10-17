@@ -970,7 +970,7 @@ def upload_file():
                 max_tokens=1400,  # ↑ more room for multi-paragraph output
                 _model_override=MODEL_MAIN,  # force pro; function still falls back to flash on 429/503
                 _timeout_s=90,  # ↑ give pro more time
-                _max_retries=6,  # ↑ retry budget                
+                _max_retries=6,  # ↑ retry budget
             )
             _ai_cache_put(_k1, ai_text or "")
             app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
