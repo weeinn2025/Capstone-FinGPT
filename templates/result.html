@@ -95,80 +95,7 @@
     <div class="ai-summary">
       <h3>AI Analysis</h3>
       <div class="prose" style="white-space:pre-wrap">{{ ai_text }}</div>
-
-      {% if ratios_text %}
-        <h4>— Ratios Focus —</h4>
-        <div class="prose" style="white-space:pre-wrap">{{ ratios_text }}</div>
-      {% endif %}
-
-      {# ——— Tier-1 Ratios & Alerts ——— #}
-      {% if metrics is defined and not metrics.empty %}
-      <div class="metrics-wrap">
-        <h3>Tier-1 Financial Ratios & Alerts</h3>
-        <table class="metrics-table">
-          <thead>
-            <tr>
-              <th class="left">Company</th>
-              <th>Year</th>
-              <th>Revenue</th>
-              <th>Net Income</th>
-              <th>Net Margin</th>
-              <th>Debt/Equity</th>
-              <th>Debt/Assets</th>
-              <th>Rev YoY</th>
-              <th>NI YoY</th>
-              <th>Liquidity</th>
-              <th>Leverage</th>
-              <th>Rev Trend</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for _, r in metrics.iterrows() %}
-            <tr>
-              <td class="left">{{ r["Company"] }}</td>
-              <td>{{ r["Year"]|int }}</td>
-
-              <!-- numeric columns -->
-              <td>{{ r["revenue"]|default('NaN')|currency }}</td>
-              <td>{{ r["net_income"]|default('NaN')|currency }}</td>
-              <td>{{ r["net_margin"]|pct }}</td>
-              <td>
-                {# Debt/Equity: print number to 2dp if not NaN #}
-                {% set de = r["debt_to_equity"] %}
-                {{ 'NaN' if de != de else ('%.2f' % de) }}
-              </td>
-              <td>
-                {% set da = r["debt_to_assets"] %}
-                {{ 'NaN' if da != da else ('%.2f' % da) }}
-              </td>
-              <td>{{ r["rev_yoy"]|pct }}</td>  
-              <td>{{ r["ni_yoy"]|pct }}</td>
-
-              <!-- alert dots (always render one dot; gray when missing) -->
-              {% set liq = r["alert_liquidity"] %}
-              <td><span class="dot {{ liq if liq else 'gray' }}"></span></td>
-
-              {% set lev = r["alert_leverage"] %}
-              <td><span class="dot {{ lev if lev else 'gray' }}"></span></td>
-
-              {% set rtr = r["alert_revtrend"] %}
-              <td><span class="dot {{ rtr if rtr else 'gray' }}"></span></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <!-- tiny Legend -->
-        <div class="legend">
-          Legend:
-          <span class="dot green"></span>green = OK /
-          <span class="dot red"></span>red = warning /
-          <span class="dot gray"></span>gray = not available
-        </div>
-      </div>  {# <-- close .metrics-wrap div #}  
-      {% endif %}
-    </div>  {# <-- close .ai-summary div #}
-
-
+    </div>
   {% else %}
     <p class="ai-summary">
       <span style="color:red;">
@@ -177,6 +104,78 @@
     </p>
   {% endif %}
 
+  {# ——— Ratios Focus (independent) ——— #}
+  {% if ratios_text %}
+    <div class="ai-summary">
+      <h4>— Ratios Focus —</h4>
+      <div class="prose" style="white-space:pre-wrap">{{ ratios_text }}</div>
+    </div>
+  {% endif %}
+
+  {# ——— Tier-1 Ratios & Alerts ——— #}
+  {% if metrics is defined and not metrics.empty %}
+  <div class="metrics-wrap">
+    <h3>Tier-1 Financial Ratios & Alerts</h3>
+    <table class="metrics-table">
+      <thead>
+        <tr>
+          <th class="left">Company</th>
+          <th>Year</th>
+          <th>Revenue</th>
+          <th>Net Income</th>
+          <th>Net Margin</th>
+          <th>Debt/Equity</th>
+          <th>Debt/Assets</th>
+          <th>Rev YoY</th>
+          <th>NI YoY</th>
+          <th>Liquidity</th>
+          <th>Leverage</th>
+          <th>Rev Trend</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for _, r in metrics.iterrows() %}
+        <tr>
+          <td class="left">{{ r["Company"] }}</td>
+          <td>{{ r["Year"]|int }}</td>
+          <!-- numeric columns -->
+          <td>{{ r["revenue"]|default('NaN')|currency }}</td>
+          <td>{{ r["net_income"]|default('NaN')|currency }}</td>
+          <td>{{ r["net_margin"]|pct }}</td>
+          <td>
+            {# Debt/Equity: print number to 2dp if not NaN #}
+            {% set de = r["debt_to_equity"] %}
+            {{ 'NaN' if de != de else ('%.2f' % de) }}
+          </td>
+          <td>
+            {% set da = r["debt_to_assets"] %}
+            {{ 'NaN' if da != da else ('%.2f' % da) }}
+          </td>
+          <td>{{ r["rev_yoy"]|pct }}</td>  
+          <td>{{ r["ni_yoy"]|pct }}</td>
+
+          <!-- alert dots (always render one dot; gray when missing) -->
+          {% set liq = r["alert_liquidity"] %}
+          <td><span class="dot {{ liq if liq else 'gray' }}"></span></td>
+
+          {% set lev = r["alert_leverage"] %}
+          <td><span class="dot {{ lev if lev else 'gray' }}"></span></td>
+
+          {% set rtr = r["alert_revtrend"] %}
+          <td><span class="dot {{ rtr if rtr else 'gray' }}"></span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <!-- tiny Legend -->
+    <div class="legend">
+      Legend:
+      <span class="dot green"></span>green = OK /
+      <span class="dot red"></span>red = warning /
+      <span class="dot gray"></span>gray = not available
+    </div>
+  </div>  {# <-- close .metrics-wrap div #}  
+{% endif %}
 
 
   {# ——— Download PDF & Excel buttons ——— #}
