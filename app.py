@@ -1141,20 +1141,26 @@ def upload_file():
             try:
                 ratios_text = call_gemini_v1(
                     prompt_text=_clean_prompt(ratios_prompt, max_len=20000),
-                    temperature=0.25,
+                    temperature=0.15,  # lower randomness → tighter, more factual prose
                     top_p=0.9,
                     top_k=32,
-                    max_tokens=900,  # give enough room so it doesn't truncate
+                    max_tokens=1100,  # # more space for per-company paragraphs
+                    _model_override="gemini-2.5-pro",  # <<< force pro here
                 ).strip()
             except Exception as e:
                 ratios_text = ""
                 app.logger.warning("Ratios AI call failed: %s", e)
 
-            # >>> add this normalization guard <<<
+            # normalize & lightly guard fragments (gentle for ratios)
             ratios_text = _postprocess_ai_text(ratios_text)
-            if len(ratios_text) < 40 or ratios_text.count(" ") < 6:
-                # treat as likely fragment → suppress so template won't show junk
+            if len(ratios_text) < 30 or ratios_text.count(" ") < 5:
                 ratios_text = ""
+            else:
+                # small touch: ensure it ends cleanly
+                if not ratios_text.endswith(('.', '!', '?')):
+                    ratios_text += '.'
+            # (optional) debug
+            app.logger.info("ratios_text: chars=%d words=%d", len(ratios_text), len(ratios_text.split()))
 
     # ---- continue with your existing render_template(...) exactly as before ----------------------
 
@@ -1162,7 +1168,7 @@ def upload_file():
         "result.html",
         summary=summary,
         ai_text=ai_text,
-        ratios_text=ratios_text,  # ← add this
+        ratios_text=ratios_text,  # ← add this <<< must be here
         chart_data=chart_data,
         fig_json=fig_json,
         years=years,
