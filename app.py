@@ -1051,10 +1051,10 @@ def upload_file():
 
                     parts.append(s1 + " " + s2)
 
-        ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
-    except Exception as e:
-        app.logger.warning("Rule-based summary failed: %s", e)
-        ai_text = "(No AI summary due to an unexpected error.)"
+            ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
+        except Exception as e:
+            app.logger.warning("Rule-based summary failed: %s", e)
+            ai_text = "(No AI summary due to an unexpected error.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
