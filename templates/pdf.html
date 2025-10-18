@@ -15,19 +15,19 @@
     h2 { bookmark-level: 1; bookmark-state: open; }  /* top-level entries */
     h3 { bookmark-level: 2; }                        /* optional sub-entries */
     h1, h4, h5, h6 { bookmark-level: none; }         /* suppress others */
-  
-   
+
+
     /* ===== Page rules (one set only) ===== */
     /* Default pages: portrait */
     /* --- page sizing for WeasyPrint --- */
-    @page { size: A4 portrait; margin: 18mm; }         
+    @page { size: A4 portrait; margin: 18mm; }
 
     /* Named page for wide content or wide page */
     @page wide { size: A4 landscape; margin: 15mm; }
 
 
     /* utilities */
-    .page-cut { break-after: page; }  /* force a page break after this block */     
+    .page-cut { break-after: page; }  /* force a page break after this block */
 
     /* Utility: to start on a new wide page */
     .landscape-page { page: wide; break-before: page; }           /* start new wide page */
@@ -97,20 +97,20 @@
   {% if ai_text %}
     <div class="ai-summary">
       <h3>AI Analysis</h3>
-      <p>{{ ai_text }}</p>
-
-      {% if ratios_text %}
-        <h4>— Ratios Focus —</h4>
-        <p>{{ ratios_text }}</p>
-      {% endif %}
+      <div style="white-space:pre-wrap">{{ ai_text }}</div>
     </div>
- 
   {% else %}
     <p class="ai-summary">
-      <span style="color:red;">
-        No AI insight was generated. Please check your API settings.
-      </span>
+      <span style="color:red;">No AI insight was generated. Please check your API settings.</span>
     </p>
+  {% endif %}
+
+  {# ——— Ratios Focus (independent) ——— #}
+  {% if ratios_text %}
+    <div class="ai-summary">
+      <h3>Ratios Focus</h3>
+      <div style="white-space:pre-wrap">{{ ratios_text }}</div>
+    </div>
   {% endif %}
 
   {# ——— Financial Chart ——— #}
