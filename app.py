@@ -1042,15 +1042,19 @@ def upload_file():
                     ni_dir = "higher" if ni1 >= ni0 else "lower"
 
                     s1 = f"**{comp}.** Revenue {rev_dir} versus {y0} and Net income {ni_dir} by {y1}."
-                    # optional margin direction hint (purely deterministic)
-                    margin_hint = ""
-                    # if you have a quick way to estimate margin direction from ai_df, add it here
-                    s2 = f"Across the period {y0}–{y1}, top-line and bottom-line moved in the same general direction for {comp}, with no forecasts or assumptions."
+
+                    # Optional second sentence, wrapped to satisfy line-length (E501)
+                    s2 = (
+                        f"Across the period {y0}–{y1}, top-line and bottom-line moved in the same "
+                        f"general direction for {comp}, with no forecasts or assumptions."
+                    )
+
                     parts.append(s1 + " " + s2)
-            ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
-        except Exception as e:
-            app.logger.warning("Rule-based summary failed: %s", e)
-            ai_text = "(No AI summary due to an unexpected error.)"
+
+        ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
+    except Exception as e:
+        app.logger.warning("Rule-based summary failed: %s", e)
+        ai_text = "(No AI summary due to an unexpected error.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
