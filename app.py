@@ -1039,7 +1039,7 @@ def upload_file():
                     ni1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
 
                     rev_dir = "higher" if rev1 >= rev0 else "lower"
-                    ni_dir  = "higher" if ni1 >= ni0 else "lower"
+                    ni_dir = "higher" if ni1 >= ni0 else "lower"
 
                     s1 = f"**{comp}.** Revenue {rev_dir} versus {y0} and Net income {ni_dir} by {y1}."
                     # optional margin direction hint (purely deterministic)
