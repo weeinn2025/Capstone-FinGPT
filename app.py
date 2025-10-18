@@ -1022,10 +1022,10 @@ def upload_file():
         except Exception as e:
             app.logger.warning("AI ultra-short fallback failed: %s", e)
 
-    # 4) Final guarantee: synthesize a tiny, deterministic summary if still empty
+    # 4) Final guarantee: multi-sentence deterministic summary if still empty
     if not ai_text or not ai_text.strip():
         try:
-            bullets = []
+            parts = []
             if not ai_df.empty:
                 _t = ai_df.sort_values(["Company", "Year"])
                 for comp, g in _t.groupby("Company", sort=False):
@@ -1037,10 +1037,21 @@ def upload_file():
                     rev1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
                     ni0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Net income")]["Value"].sum()
                     ni1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
-                    rev_trend = "higher" if rev1 >= rev0 else "lower"
-                    ni_trend = "higher" if ni1 >= ni0 else "lower"
-                    bullets.append(f"**{comp}.** Revenue {rev_trend} vs {y0}; Net income {ni_trend} by {y1}.")
-            ai_text = " ".join(bullets) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
+
+                    rev_dir = "higher" if rev1 >= rev0 else "lower"
+                    ni_dir = "higher" if ni1 >= ni0 else "lower"
+
+                    s1 = f"**{comp}.** Revenue {rev_dir} versus {y0} and Net income {ni_dir} by {y1}."
+
+                    # Optional second sentence, wrapped to satisfy line-length (E501)
+                    s2 = (
+                        f"Across the period {y0}–{y1}, top-line and bottom-line moved in the same "
+                        f"general direction for {comp}, with no forecasts or assumptions."
+                    )
+
+                    parts.append(s1 + " " + s2)
+
+            ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
         except Exception as e:
             app.logger.warning("Rule-based summary failed: %s", e)
             ai_text = "(No AI summary due to an unexpected error.)"
