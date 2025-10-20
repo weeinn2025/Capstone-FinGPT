@@ -633,6 +633,7 @@ def call_gemini_v1(
     _timeout_s: int = 60,
     # ↑ (C) stronger retry budget
     _max_retries: int = 5,
+    random_seed: int | None = None,  # ← add this
 ) -> str:
     """
     Minimal, v1-compliant request for Gemini. Returns plain text or "".
@@ -655,6 +656,8 @@ def call_gemini_v1(
             "topP": float(top_p),
             "topK": int(top_k),
             "maxOutputTokens": int(max_tokens),
+            # "seed" is the field recognized by Gemini for deterministic runs
+            **({"seed": int(random_seed)} if random_seed is not None else {}),
         },
     }
 
@@ -964,13 +967,13 @@ def upload_file():
             )
             ai_text = call_gemini_v1(
                 prompt_text=_clean_prompt(prompt, max_len=12000),
-                temperature=0.2,  # lower randomness → more consistent paragraphs
-                top_p=0.9,
+                temperature=0.05,  # steadier
+                top_p=1.0,  # full nucleus to reduce accidental truncation
                 top_k=32,
-                max_tokens=1400,  # ↑ more room for multi-paragraph output
-                _model_override=MODEL_MAIN,  # force pro; function still falls back to flash on 429/503
-                _timeout_s=90,  # ↑ give pro more time
-                _max_retries=6,  # ↑ retry budget
+                max_tokens=1400,  # more room for multi-paragraph output
+                _model_override=MODEL_MAIN,
+                _timeout_s=90,
+                _max_retries=6,
             )
             _ai_cache_put(_k1, ai_text or "")
             app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
@@ -1261,22 +1264,31 @@ def preview():
 
 @app.route("/download_pdf", methods=["POST"])
 def download_pdf():
-    summary = json.loads(request.form["summary"])
-    ai_text = request.form["ai_text"]
+    # Data posted from result.html (hidden fields)
+    summary = json.loads(request.form.get("summary") or "[]")
+    ai_text = (request.form.get("ai_text") or "").strip()
+    ratios_text = (request.form.get("ratios_text") or "").strip()
 
-    chart_data = request.form.get("chart_data")
-    chart_data_all = request.form.get("chart_data_all")
+    chart_data = request.form.get("chart_data") or ""
+    chart_data_all = request.form.get("chart_data_all") or ""
 
+    # OPTIONAL: add a clean sentence terminator without changing content
+    if ai_text and ai_text[-1] not in ".!?":
+        ai_text += "."
+    if ratios_text and ratios_text[-1] not in ".!?":
+        ratios_text += "."
+
+    # Metrics recomputation is fine for the PDF table (doesn't touch ai/ratios text)
     summary_df = pd.DataFrame(summary)
-    summary_df["Year"] = pd.to_numeric(summary_df["Year"], errors="coerce").astype("Int64")
-    summary_df["Value"] = pd.to_numeric(summary_df["Value"], errors="coerce")
-
+    summary_df["Year"] = pd.to_numeric(summary_df.get("Year"), errors="coerce").astype("Int64")
+    summary_df["Value"] = pd.to_numeric(summary_df.get("Value"), errors="coerce")
     metrics = compute_metrics(summary_df)
 
     html_out = render_template(
         "pdf.html",
         summary=summary,
-        ai_text=ai_text,
+        ai_text=ai_text,  # ← EXACT string seen on the page
+        ratios_text=ratios_text,  # ← EXACT string seen on the page
         chart_data=chart_data,
         chart_data_all=chart_data_all,
         metrics=metrics,
