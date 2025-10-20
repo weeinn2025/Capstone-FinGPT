@@ -967,10 +967,10 @@ def upload_file():
             )
             ai_text = call_gemini_v1(
                 prompt_text=_clean_prompt(prompt, max_len=12000),
-                temperature=0.05,   # steadier
-                top_p=1.0,          # full nucleus to reduce accidental truncation
+                temperature=0.05,  # steadier
+                top_p=1.0,  # full nucleus to reduce accidental truncation
                 top_k=32,
-                max_tokens=1400,    # more room for multi-paragraph output
+                max_tokens=1400,  # more room for multi-paragraph output
                 _model_override=MODEL_MAIN,
                 _timeout_s=90,
                 _max_retries=6,
@@ -1287,8 +1287,8 @@ def download_pdf():
     html_out = render_template(
         "pdf.html",
         summary=summary,
-        ai_text=ai_text,              # ← EXACT string seen on the page
-        ratios_text=ratios_text,      # ← EXACT string seen on the page
+        ai_text=ai_text,  # ← EXACT string seen on the page
+        ratios_text=ratios_text,  # ← EXACT string seen on the page
         chart_data=chart_data,
         chart_data_all=chart_data_all,
         metrics=metrics,
