@@ -633,7 +633,7 @@ def call_gemini_v1(
     _timeout_s: int = 60,
     # ↑ (C) stronger retry budget
     _max_retries: int = 5,
-    random_seed: int | None = None,   # ← add this
+    random_seed: int | None = None,  # ← add this
 ) -> str:
     """
     Minimal, v1-compliant request for Gemini. Returns plain text or "".
