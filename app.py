@@ -11,6 +11,7 @@ import os
 import zipfile
 from io import BytesIO
 from pathlib import Path
+from app_validators import normalize_and_validate, DataValidationError
 
 import matplotlib
 
@@ -864,6 +865,15 @@ def upload_file():
 
     needed = {"Company", "Year", "LineItem", "Value"}
     use_df = df_norm if needed.issubset(set(df_norm.columns)) else raw_df
+
+    # ---- strict normalization & numeric validation (hard-fail on issues)
+    try:
+        # normalizes “Shareholders’ Equity” style labels and verifies Value is numeric
+        use_df = normalize_and_validate(use_df)
+    except (ValueError, DataValidationError) as e:
+        # friendlier error back to the browser instead of a 500
+        flash(str(e))
+        return redirect(request.url_root)
 
     if "Year" in use_df.columns:
         years_debug = sorted(int(v) for v in pd.unique(use_df["Year"].dropna()))
