@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, Tuple
 
 import pandas as pd
 
