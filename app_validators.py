@@ -14,6 +14,7 @@ __all__ = ["DataValidationError", "normalize_and_validate"]
 @dataclass
 class DataValidationError(Exception):
     """Raised when an uploaded financials file fails validation."""
+
     message: str
     sample_rows: pd.DataFrame | None = None
 
