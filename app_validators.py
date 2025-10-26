@@ -37,7 +37,7 @@ _APOSTROPHE_LIKE: Tuple[str, ...] = (
     "\u2018",  # ‘
     "\u2032",  # ′
     "\u02bc",  # ʼ
-    "\uFF07",  # Fullwidth '
+    "\uff07",  # Fullwidth '
 )
 
 # Sometimes users get mojibake like "Shareholdersâ€™ Equity"
@@ -132,11 +132,7 @@ def normalize_and_validate(df: pd.DataFrame) -> pd.DataFrame:
     # Coerce Value to numeric (accept commas, currency symbols if present)
     # Remove common formatting noise, then to_numeric
     cleaned_value = (
-        out["Value"]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-        .str.replace("$", "", regex=False)
-        .str.strip()
+        out["Value"].astype(str).str.replace(",", "", regex=False).str.replace("$", "", regex=False).str.strip()
     )
     out["Value"] = pd.to_numeric(cleaned_value, errors="coerce")
 
