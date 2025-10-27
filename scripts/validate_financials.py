@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app_validators import normalize_and_validate
+from app_validators import normalize_and_validate  # noqa: E402
 
 
 def _read_any(path: Path) -> pd.DataFrame:
