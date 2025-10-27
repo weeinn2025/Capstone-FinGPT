@@ -1,11 +1,19 @@
 # scripts/validate_financials.py
 from __future__ import annotations
-import argparse
-import pandas as pd
-from pathlib import Path
-import zipfile
 
-from app_validators import normalize_and_validate
+import argparse
+import sys
+import zipfile
+from pathlib import Path
+
+import pandas as pd
+
+# ensure repo root is on sys.path when running this script directly
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app_validators import normalize_and_validate  # noqa: E402
 
 
 def _read_any(path: Path) -> pd.DataFrame:
