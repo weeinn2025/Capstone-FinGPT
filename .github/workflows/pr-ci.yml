@@ -46,6 +46,11 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+      # >>> Add this block <<<
+      - name: Validate sample financials
+        run: |
+          python scripts/validate_financials.py --path samples/sample_financials_2020_2024.zip
+
       - name: Lint & format
         run: |
           black --check --diff --color --verbose .
