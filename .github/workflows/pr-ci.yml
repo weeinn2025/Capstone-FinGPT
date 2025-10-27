@@ -49,7 +49,7 @@ jobs:
       # >>> Add this block <<<
       - name: Validate sample financials
         run: |
-          python scripts/validate_financials.py --path samples/sample_financials_2020_2024.zip
+          PYTHONPATH="$PWD" python scripts/validate_financials.py --path samples/sample_financials_2020_2024.zip
 
       - name: Lint & format
         run: |
