@@ -7,6 +7,7 @@ import zipfile
 
 from app_validators import normalize_and_validate
 
+
 def _read_any(path: Path) -> pd.DataFrame:
     if path.suffix.lower() == ".csv":
         return pd.read_csv(path)
@@ -27,6 +28,7 @@ def _read_any(path: Path) -> pd.DataFrame:
         return pd.concat(frames, ignore_index=True, sort=False)
     raise SystemExit(f"Unsupported file type: {path.suffix}")
 
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--path", required=True, help="CSV/XLSX/ZIP to validate")
@@ -35,6 +37,7 @@ def main():
     df = _read_any(Path(args.path))
     _ = normalize_and_validate(df)  # raises on problems
     print("✅ OK: financials validated")
+
 
 if __name__ == "__main__":
     main()
