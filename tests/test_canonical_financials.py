@@ -54,7 +54,7 @@ def test_unique_keys(df):
 
 def test_balance_identity(df):
     g = df[df["Line Item"].isin({"Total Assets", "Total Liabilities", "Shareholders' Equity"})]
-    for (c,y), t in g.groupby(["Company", "Year"]):
+    for (c, y), t in g.groupby(["Company", "Year"]):
         vals = dict(zip(t["Line Item"], t["Value"]))
         assert (
             vals["Total Assets"] == vals["Total Liabilities"] + vals["Shareholders' Equity"]
