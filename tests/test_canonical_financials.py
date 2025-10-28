@@ -14,9 +14,8 @@ ITEMS = {
 COMPANIES = {"Apple Inc.", "Microsoft", "NVIDIA"}
 YMIN, YMAX = 2020, 2024
 
+
 @pytest.fixture(scope="session")
-
-
 def df() -> pd.DataFrame:
     assert os.path.exists(CSV_ZIP), f"Missing: {CSV_ZIP}"
     rows = []
