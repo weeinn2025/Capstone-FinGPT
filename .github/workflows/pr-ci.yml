@@ -45,12 +45,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
+          pip install pytest black flake8 pandas openpyxl xlsxwriter
 
-      # >>> Add this block <<<
-      - name: Validate sample financials
+      # >>> Add this block + update to rev2 <<<
+      - name: Validate canonical pack structure (rev2)
         run: |
-          PYTHONPATH="$PWD" python scripts/validate_financials.py --path samples/sample_financials_2020_2024.zip
+          PYTHONPATH="$PWD" python scripts/validate_financials.py --path samples/sample_financials_rev2_2020_2024.zip
+
+      # ✅ NEW: CSV↔XLSX consistency validator (rev2)
+      - name: Validate CSV↔XLSX sample packs (rev2)
+        run: python scripts/validate_samples.py
 
       - name: Lint & format
         run: |
