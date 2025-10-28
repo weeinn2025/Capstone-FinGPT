@@ -59,4 +59,3 @@ def test_balance_identity(df):
         assert (
             vals["Total Assets"] == vals["Total Liabilities"] + vals["Shareholders' Equity"]
         ), f"Identity fail: {c} {y}"
-
