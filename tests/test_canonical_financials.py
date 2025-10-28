@@ -1,6 +1,9 @@
 # tests/test_canonical_financials.py:
 
-import os, zipfile, pandas as pd, pytest
+import os
+import zipfile
+import pandas as pd
+import pytest
 
 CSV_ZIP = os.path.join("samples", "sample_financials_rev2_2020_2024.zip")
 EXPECTED_COLUMNS = ["Company", "Year", "Line Item", "Value"]
