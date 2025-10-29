@@ -20,6 +20,23 @@
       <label for="file">Choose CSV/XLSX/ZIP (max 5 MB):</label><br>
       <input id="file" type="file" name="file" accept=".csv,.xlsx,.zip" required>
 
+      <!-- AI Analysis Mode (optional UI toggle; default is "both") -->
+      <fieldset style="margin-top:12px;">
+        <legend style="font-weight:bold;">AI Analysis Mode (optional)</legend>
+        <label style="margin-right:10px;">
+          <input type="radio" name="ai_mode" value="both" checked>
+          Both (Descriptive + Ratios Focus)
+        </label>
+        <label style="margin-right:10px;">
+          <input type="radio" name="ai_mode" value="desc">
+          Descriptive only
+        </label>
+        <label>
+          <input type="radio" name="ai_mode" value="ratios">
+          Ratios Focus only
+        </label>
+      </fieldset>      
+
       <div style="margin-top:8px;">
         <button type="submit">Analyze</button>
         <button type="submit"
