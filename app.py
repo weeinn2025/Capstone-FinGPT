@@ -43,10 +43,12 @@ AI_MODE_DEFAULT = os.getenv("AI_MODE", "both").strip().lower()
 if AI_MODE_DEFAULT not in {"desc", "ratios", "both"}:
     AI_MODE_DEFAULT = "both"
 
+
 def _resolve_ai_mode(request_form) -> str:
     """Resolve AI analysis mode from form (if any) or env default."""
     mode = (request_form.get("ai_mode") or AI_MODE_DEFAULT).strip().lower()
     return mode if mode in {"desc", "ratios", "both"} else "both"
+
 
 # ---- 1) Load environment variables ----------------------------------
 
@@ -841,6 +843,7 @@ def upload_file():
     saved_name = request.form.get("saved_filename")
 
     # Resolve AI analysis mode for this request (form overrides env)
+
     mode = _resolve_ai_mode(request.form)    
 
     # ---- locate file (preview or fresh upload) ----------------------------------
@@ -929,9 +932,11 @@ def upload_file():
         .sort_values(["Company", "Year", "LI_CANON"])
     )
 
-    ai_text = ""  # make sure it's defined regardless of mode    
+
+    ai_text = ""  # make sure it's defined regardless of mode
     # --- AI insight (General summary) ---------------------------------------------------------
-    if mode in {"desc", "both"}:    
+
+    if mode in {"desc", "both"}:
         # 1) Auto-scale years sent to the model (reduces overload with many companies)
         company_count = ai_df["Company"].nunique() if not ai_df.empty else 1
         years_keep = AI_YEARS_PER_COMPANY if company_count <= 2 else min(3, AI_YEARS_PER_COMPANY)
