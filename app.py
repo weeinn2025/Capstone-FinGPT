@@ -844,7 +844,6 @@ def upload_file():
 
     # Resolve AI analysis mode for this request (form overrides env)
 
-
     mode = _resolve_ai_mode(request.form)    
 
     # ---- locate file (preview or fresh upload) ----------------------------------
