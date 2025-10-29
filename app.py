@@ -38,6 +38,18 @@ import plotly.graph_objects as go
 from weasyprint import HTML
 from xlsxwriter.utility import xl_col_to_name
 
+# --- AI mode config / helper -------------------------------------------
+AI_MODE_DEFAULT = os.getenv("AI_MODE", "both").strip().lower()
+if AI_MODE_DEFAULT not in {"desc", "ratios", "both"}:
+    AI_MODE_DEFAULT = "both"
+
+
+def _resolve_ai_mode(request_form) -> str:
+    """Resolve AI analysis mode from form (if any) or env default."""
+    mode = (request_form.get("ai_mode") or AI_MODE_DEFAULT).strip().lower()
+    return mode if mode in {"desc", "ratios", "both"} else "both"
+
+
 # ---- 1) Load environment variables ----------------------------------
 
 # Make sure this happens *before* you read from os.environ
@@ -830,6 +842,10 @@ def index():
 def upload_file():
     saved_name = request.form.get("saved_filename")
 
+    # Resolve AI analysis mode for this request (form overrides env)
+
+    mode = _resolve_ai_mode(request.form)
+
     # ---- locate file (preview or fresh upload) ----------------------------------
     if saved_name:
         filepath = UPLOAD_FOLDER / saved_name
@@ -916,158 +932,162 @@ def upload_file():
         .sort_values(["Company", "Year", "LI_CANON"])
     )
 
+    ai_text = ""  # make sure it's defined regardless of mode
     # --- AI insight (General summary) ---------------------------------------------------------
-    # 1) Auto-scale years sent to the model (reduces overload with many companies)
-    company_count = ai_df["Company"].nunique() if not ai_df.empty else 1
-    years_keep = AI_YEARS_PER_COMPANY if company_count <= 2 else min(3, AI_YEARS_PER_COMPANY)
 
-    # Keep {years_keep} years PER COMPANY of Rev/NI
-    lines = []
-    if not ai_df.empty:
-        _tmp = ai_df.sort_values(["Company", "Year"])
-        for comp, g in _tmp.groupby("Company", sort=False):
-            # build Revenue/Net income pairs per year
-            gg = (
-                g.pivot_table(index="Year", columns="LI_CANON", values="Value", aggfunc="sum")
-                .reset_index()
-                .sort_values("Year")
-            ).tail(years_keep)
-            for _, row in gg.iterrows():
-                yr = int(row.get("Year", 0)) if pd.notna(row.get("Year")) else ""
-                rev = float(row.get("Revenue", 0) or 0)
-                ni = float(row.get("Net income", 0) or 0)
-                lines.append(f"{comp} {yr} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
+    if mode in {"desc", "both"}:
+        # 1) Auto-scale years sent to the model (reduces overload with many companies)
+        company_count = ai_df["Company"].nunique() if not ai_df.empty else 1
+        years_keep = AI_YEARS_PER_COMPANY if company_count <= 2 else min(3, AI_YEARS_PER_COMPANY)
 
-    # Slightly raise overall cap since we now include more years
-    if len(lines) > 260:
-        lines = lines[-260:]
+        # Keep {years_keep} years PER COMPANY of Rev/NI
+        lines = []
+        if not ai_df.empty:
+            _tmp = ai_df.sort_values(["Company", "Year"])
+            for comp, g in _tmp.groupby("Company", sort=False):
+                # build Revenue/Net income pairs per year
+                gg = (
+                    g.pivot_table(index="Year", columns="LI_CANON", values="Value", aggfunc="sum")
+                    .reset_index()
+                    .sort_values("Year")
+                ).tail(years_keep)
+                for _, row in gg.iterrows():
+                    yr = int(row.get("Year", 0)) if pd.notna(row.get("Year")) else ""
+                    rev = float(row.get("Revenue", 0) or 0)
+                    ni = float(row.get("Net income", 0) or 0)
+                    lines.append(f"{comp} {yr} | Revenue: {rev:,.0f} | Net income: {ni:,.0f}")
 
-    # 2) Stronger prompt (keeps output consistent and multi-paragraph)
-    prompt = (
-        "You are a financial analyst. Write a concise multi-paragraph summary using ONLY the rows below.\n\n"
-        f"Cover the last {years_keep} years for each company.\n\n"
-        "Requirements:\n"
-        "• Write one short paragraph (2–3 sentences) per company.\n"
-        "• Focus on growth/decline in Revenue and Net income, and margin direction.\n"
-        "• Use clear verbs (rose/fell/improved/softened/stable). No forecasts, no advice, no invented data.\n"
-        "• Do not introduce new numbers beyond the table. End each paragraph with a period.\n\n"
-        "Data (company-year rows):\n" + "\n".join(lines)
-    )
+        # Slightly raise overall cap since we now include more years
+        if len(lines) > 260:
+            lines = lines[-260:]
 
-    # Allow a bit more room for 5-year inputs and clean the text
-    prompt = _clean_prompt(prompt, max_len=12000)
-
-    # Force pro for richer output; include the model in the cache key
-    MODEL_MAIN = "gemini-2.5-pro"
-    _k1 = hashlib.sha1((MODEL_MAIN + "|" + prompt).encode("utf-8")).hexdigest()
-    ai_text = _ai_cache_get(_k1) or ""
-
-    if not ai_text:
-        try:
-            # Stronger prompt guarantees separate paragraphs per company.
-            prompt = (
-                "You are a financial analyst. Using ONLY the rows below, write a concise yet complete summary.\n\n"
-                f"Cover the last {years_keep} years for each company.\n\n"
-                "Formatting requirements:\n"
-                "• Use a separate paragraph per company, beginning with the company name in bold like **Apple Inc.**\n"
-                "• Write 2–4 sentences per company. Do not collapse companies into one paragraph.\n"
-                "• Focus on revenue, net income, and margin direction (rose/fell/improved/softened/stable).\n"
-                "• No forecasts or advice. No new numbers beyond the table. End each paragraph with a period.\n\n"
-                "Data (company-year rows):\n" + "\n".join(lines)
-            )
-            ai_text = call_gemini_v1(
-                prompt_text=_clean_prompt(prompt, max_len=12000),
-                temperature=0.05,  # steadier
-                top_p=1.0,  # full nucleus to reduce accidental truncation
-                top_k=32,
-                max_tokens=1400,  # more room for multi-paragraph output
-                _model_override=MODEL_MAIN,
-                _timeout_s=90,
-                _max_retries=6,
-            )
-            _ai_cache_put(_k1, ai_text or "")
-            app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
-
-            # Gentle post-processing (no aggressive clipping)
-            ai_text = _postprocess_ai_text(ai_text)
-            if len(ai_text) < 60 or ai_text.count(" ") < 10:
-                ai_text = ""
-        except Exception as e:
-            app.logger.warning("AI primary call failed: %s", e)
-
-    # 3a) Fallback with fewer rows if still empty
-    if not ai_text or not ai_text.strip():
-        # Retry with a small slice; 50 keeps some cross-year signal for 5y/company
-        SHORT_LINES = 50
-        short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
-        retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
-        try:
-            ai_text = call_gemini_v1(
-                prompt_text=_clean_prompt(retry_prompt, max_len=4000),
-                temperature=0.2,
-                top_p=0.85,
-                top_k=32,
-                max_tokens=800,
-            )
-            app.logger.info("AI retry call returned length=%s", len(ai_text or ""))
-        except Exception as e:
-            app.logger.warning("AI retry call failed: %s", e)
-
-    # 3b) Ultra-short fallback: tiny prompt + smaller output
-    if not ai_text or not ai_text.strip():
-        short_lines = lines[-20:] if len(lines) > 20 else lines
-        short_prompt = (
-            "In 2–3 sentences, state the two biggest trends across the companies. "
-            "No advice, no invented numbers.\n" + "\n".join(short_lines)
+        # 2) Stronger prompt (keeps output consistent and multi-paragraph)
+        prompt = (
+            "You are a financial analyst. Write a concise multi-paragraph summary using ONLY the rows below.\n\n"
+            f"Cover the last {years_keep} years for each company.\n\n"
+            "Requirements:\n"
+            "• Write one short paragraph (2–3 sentences) per company.\n"
+            "• Focus on growth/decline in Revenue and Net income, and margin direction.\n"
+            "• Use clear verbs (rose/fell/improved/softened/stable). No forecasts, no advice, no invented data.\n"
+            "• Do not introduce new numbers beyond the table. End each paragraph with a period.\n\n"
+            "Data (company-year rows):\n" + "\n".join(lines)
         )
-        try:
-            ai_text = call_gemini_v1(
-                prompt_text=_clean_prompt(short_prompt, max_len=2000),
-                temperature=0.15,
-                top_p=0.85,
-                top_k=32,
-                max_tokens=420,
-                _model_override="gemini-2.5-flash",  # keep this tiny and fast
+
+        # Allow a bit more room for 5-year inputs and clean the text
+        prompt = _clean_prompt(prompt, max_len=12000)
+
+        # Force pro for richer output; include the model in the cache key
+        MODEL_MAIN = "gemini-2.5-pro"
+        _k1 = hashlib.sha1((MODEL_MAIN + "|" + prompt).encode("utf-8")).hexdigest()
+        ai_text = _ai_cache_get(_k1) or ""
+
+        if not ai_text:
+            try:
+                # Stronger prompt guarantees separate paragraphs per company.
+                prompt = (
+                    "You are a financial analyst. Using ONLY the rows below, write a concise yet complete summary.\n\n"
+                    f"Cover the last {years_keep} years for each company.\n\n"
+                    "Formatting requirements:\n"
+                    "• Use a separate paragraph per company, beginning with the company name "
+                    "in bold like **Apple Inc.**\n"
+                    "• Write 2–4 sentences per company. Do not collapse companies into one paragraph.\n"
+                    "• Focus on revenue, net income, and margin direction (rose/fell/improved/softened/stable).\n"
+                    "• No forecasts or advice. No new numbers beyond the table. End each paragraph with a period.\n\n"
+                    "Data (company-year rows):\n" + "\n".join(lines)
+                )
+                ai_text = call_gemini_v1(
+                    prompt_text=_clean_prompt(prompt, max_len=12000),
+                    temperature=0.05,  # steadier
+                    top_p=1.0,  # full nucleus to reduce accidental truncation
+                    top_k=32,
+                    max_tokens=1400,  # more room for multi-paragraph output
+                    _model_override=MODEL_MAIN,
+                    _timeout_s=90,
+                    _max_retries=6,
+                )
+                _ai_cache_put(_k1, ai_text or "")
+                app.logger.info("AI primary call returned length=%s", len(ai_text or ""))
+
+                # Gentle post-processing (no aggressive clipping)
+                ai_text = _postprocess_ai_text(ai_text)
+                if len(ai_text) < 60 or ai_text.count(" ") < 10:
+                    ai_text = ""
+            except Exception as e:
+                app.logger.warning("AI primary call failed: %s", e)
+
+        # 3a) Fallback with fewer rows if still empty
+        if not ai_text or not ai_text.strip():
+            # Retry with a small slice; 50 keeps some cross-year signal for 5y/company
+            SHORT_LINES = 50
+            short_lines = lines[-SHORT_LINES:] if len(lines) > SHORT_LINES else lines
+            retry_prompt = "Summarize key trends in 3–5 sentences. Be concise; no advice.\n" + "\n".join(short_lines)
+            try:
+                ai_text = call_gemini_v1(
+                    prompt_text=_clean_prompt(retry_prompt, max_len=4000),
+                    temperature=0.2,
+                    top_p=0.85,
+                    top_k=32,
+                    max_tokens=800,
+                )
+                app.logger.info("AI retry call returned length=%s", len(ai_text or ""))
+            except Exception as e:
+                app.logger.warning("AI retry call failed: %s", e)
+
+        # 3b) Ultra-short fallback: tiny prompt + smaller output
+        if not ai_text or not ai_text.strip():
+            short_lines = lines[-20:] if len(lines) > 20 else lines
+            short_prompt = (
+                "In 2–3 sentences, state the two biggest trends across the companies. "
+                "No advice, no invented numbers.\n" + "\n".join(short_lines)
             )
-            ai_text = _postprocess_ai_text(ai_text)
-            if len(ai_text) < 30 or ai_text.count(" ") < 5:
-                ai_text = ""
-        except Exception as e:
-            app.logger.warning("AI ultra-short fallback failed: %s", e)
+            try:
+                ai_text = call_gemini_v1(
+                    prompt_text=_clean_prompt(short_prompt, max_len=2000),
+                    temperature=0.15,
+                    top_p=0.85,
+                    top_k=32,
+                    max_tokens=420,
+                    _model_override="gemini-2.5-flash",  # keep this tiny and fast
+                )
+                ai_text = _postprocess_ai_text(ai_text)
+                if len(ai_text) < 30 or ai_text.count(" ") < 5:
+                    ai_text = ""
+            except Exception as e:
+                app.logger.warning("AI ultra-short fallback failed: %s", e)
 
-    # 4) Final guarantee: multi-sentence deterministic summary if still empty
-    if not ai_text or not ai_text.strip():
-        try:
-            parts = []
-            if not ai_df.empty:
-                _t = ai_df.sort_values(["Company", "Year"])
-                for comp, g in _t.groupby("Company", sort=False):
-                    years = g["Year"].dropna().astype(int)
-                    if years.empty:
-                        continue
-                    y0, y1 = years.min(), years.max()
-                    rev0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
-                    rev1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
-                    ni0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Net income")]["Value"].sum()
-                    ni1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
+        # 4) Final guarantee: multi-sentence deterministic summary if still empty
+        if not ai_text or not ai_text.strip():
+            try:
+                parts = []
+                if not ai_df.empty:
+                    _t = ai_df.sort_values(["Company", "Year"])
+                    for comp, g in _t.groupby("Company", sort=False):
+                        years = g["Year"].dropna().astype(int)
+                        if years.empty:
+                            continue
+                        y0, y1 = years.min(), years.max()
+                        rev0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
+                        rev1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Revenue")]["Value"].sum()
+                        ni0 = g[(g["Year"] == y0) & (g["LI_CANON"] == "Net income")]["Value"].sum()
+                        ni1 = g[(g["Year"] == y1) & (g["LI_CANON"] == "Net income")]["Value"].sum()
 
-                    rev_dir = "higher" if rev1 >= rev0 else "lower"
-                    ni_dir = "higher" if ni1 >= ni0 else "lower"
+                        rev_dir = "higher" if rev1 >= rev0 else "lower"
+                        ni_dir = "higher" if ni1 >= ni0 else "lower"
 
-                    s1 = f"**{comp}.** Revenue {rev_dir} versus {y0} and Net income {ni_dir} by {y1}."
+                        s1 = f"**{comp}.** Revenue {rev_dir} versus {y0} and Net income {ni_dir} by {y1}."
 
-                    # Optional second sentence, wrapped to satisfy line-length (E501)
-                    s2 = (
-                        f"Across the period {y0}–{y1}, top-line and bottom-line moved in the same "
-                        f"general direction for {comp}, with no forecasts or assumptions."
-                    )
+                        # Optional second sentence, wrapped to satisfy line-length (E501)
+                        s2 = (
+                            f"Across the period {y0}–{y1}, top-line and bottom-line moved in the same "
+                            f"general direction for {comp}, with no forecasts or assumptions."
+                        )
 
-                    parts.append(s1 + " " + s2)
+                        parts.append(s1 + " " + s2)
 
-            ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
-        except Exception as e:
-            app.logger.warning("Rule-based summary failed: %s", e)
-            ai_text = "(No AI summary due to an unexpected error.)"
+                ai_text = " ".join(parts) or "(No AI summary; dataset lacks Revenue/Net income rows.)"
+            except Exception as e:
+                app.logger.warning("Rule-based summary failed: %s", e)
+                ai_text = "(No AI summary due to an unexpected error.)"
 
     # --- Charts (always set fig_json & chart_data) ------------------------------
 
@@ -1126,7 +1146,7 @@ def upload_file():
 
     # [NEW] ---- Build a compact ratios text block (last 5 years per company) and ask Gemini -------
 
-    if metrics is not None and not metrics.empty:
+    if mode in {"ratios", "both"} and metrics is not None and not metrics.empty:
         # sort by Company, Year so "last 5" is correct per company
         m = metrics.sort_values(["Company", "Year"]).copy()
         # Auto-scale for ratios as well
@@ -1223,6 +1243,7 @@ def upload_file():
         summary=summary,
         ai_text=ai_text,
         ratios_text=ratios_text,  # ← add this <<< must be here
+        ai_mode=mode,  # <— add this
         chart_data=chart_data,
         fig_json=fig_json,
         years=years,
