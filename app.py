@@ -844,6 +844,7 @@ def upload_file():
 
     # Resolve AI analysis mode for this request (form overrides env)
 
+
     mode = _resolve_ai_mode(request.form)    
 
     # ---- locate file (preview or fresh upload) ----------------------------------
@@ -931,7 +932,6 @@ def upload_file():
         .reset_index()
         .sort_values(["Company", "Year", "LI_CANON"])
     )
-
 
     ai_text = ""  # make sure it's defined regardless of mode
     # --- AI insight (General summary) ---------------------------------------------------------
