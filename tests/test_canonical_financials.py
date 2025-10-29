@@ -6,9 +6,7 @@ import pandas as pd
 import pytest
 
 # --- Config (rev2 canonical packs) -----------------------------------------------
-CSV_ZIP = os.path.join(
-    os.path.dirname(__file__), "..", "samples", "sample_financials_rev2_2020_2024.zip"
-)
+CSV_ZIP = os.path.join(os.path.dirname(__file__), "..", "samples", "sample_financials_rev2_2020_2024.zip")
 
 EXPECTED_COLUMNS = ["Company", "Year", "Line Item", "Value"]
 EXPECTED_ITEMS = {
@@ -69,6 +67,6 @@ def test_balance_identity(df: pd.DataFrame):
     g = df[df["Line Item"].isin({"Total Assets", "Total Liabilities", "Shareholders' Equity"})]
     for (company, year), grp in g.groupby(["Company", "Year"]):
         vals = dict(zip(grp["Line Item"], grp["Value"]))
-        assert vals["Total Assets"] == vals["Total Liabilities"] + vals["Shareholders' Equity"], (
-            f"Identity fail: {company} {year}"
-        )
+        assert (
+            vals["Total Assets"] == vals["Total Liabilities"] + vals["Shareholders' Equity"]
+        ), f"Identity fail: {company} {year}"
