@@ -1290,7 +1290,24 @@ def preview():
     )
 
 
-# ---- 8) PDF Download Route -----------------------------------------------------
+# ---- Friendly GET redirects for download endpoints (opened directly in browser) ----
+
+
+@app.get("/download_pdf")
+@limiter.exempt
+def download_pdf_get():
+    flash("Use the 'Download as PDF' button on the results page.")
+    return redirect(url_for("index")), 302
+
+
+@app.get("/export_excel")
+@limiter.exempt
+def export_excel_get():
+    flash("Use the 'Download Excel' button on the results page.")
+    return redirect(url_for("index")), 302
+
+
+# ---- 8) PDF Download Route --------------------------------------------------------
 
 
 @app.route("/download_pdf", methods=["POST"])
