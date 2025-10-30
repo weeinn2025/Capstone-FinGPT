@@ -30,6 +30,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    url_for,  # ← add this
 )
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
