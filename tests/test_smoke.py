@@ -2,7 +2,6 @@
 #    # Replace with real tests. This makes CI pass initially.
 #    assert 1 + 1 == 2
 
-import os
 import pytest
 from app import app as flask_app
 
