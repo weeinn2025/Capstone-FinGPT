@@ -24,6 +24,7 @@ def normalize_financials_xlsx(path_or_file) -> pd.DataFrame:
     NOTE: This does *not* do semantic validation; the caller should pass the
     result to normalize_and_validate(...) afterwards.
     """
+
     def _from_excel_bytes(b: bytes) -> pd.DataFrame:
         xls = pd.ExcelFile(io.BytesIO(b), engine="openpyxl")
         frames = []
@@ -49,8 +50,7 @@ def normalize_financials_xlsx(path_or_file) -> pd.DataFrame:
 
         if not frames:
             raise DataValidationError(
-                "Excel file has no readable sheets with required columns "
-                "(Company, Year, LineItem/Line Item, Value)."
+                "Excel file has no readable sheets with required columns " "(Company, Year, LineItem/Line Item, Value)."
             )
         return pd.concat(frames, ignore_index=True)
 
