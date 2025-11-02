@@ -4,11 +4,72 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from typing import Dict, Iterable, Tuple
+import io
+from zipfile import ZipFile
 
 import pandas as pd
 
 
-__all__ = ["DataValidationError", "normalize_and_validate"]
+# ⬇️ add this name to the public API
+__all__ = ["DataValidationError", "normalize_and_validate", "normalize_financials_xlsx"]
+
+
+# ⬇️ NEW: read all worksheets in an .xlsx (or .xlsx inside a .zip) and concatenate
+def normalize_financials_xlsx(path_or_file) -> pd.DataFrame:
+    """
+    Reads ALL worksheets from an Excel workbook (or an Excel file inside a .zip),
+    keeps the four expected columns (Company, Year, LineItem/Line Item, Value),
+    and concatenates them into a single raw DataFrame.
+
+    NOTE: This does *not* do semantic validation; the caller should pass the
+    result to normalize_and_validate(...) afterwards.
+    """
+    def _from_excel_bytes(b: bytes) -> pd.DataFrame:
+        xls = pd.ExcelFile(io.BytesIO(b), engine="openpyxl")
+        frames = []
+        for sheet in xls.sheet_names:
+            df = pd.read_excel(xls, sheet_name=sheet)
+            if df is None or df.empty:
+                continue
+            # normalize header spelling/whitespace
+            df.columns = [str(c).strip() for c in df.columns]
+
+            # accept either "LineItem" or "Line Item"
+            keep_cols = []
+            for c in ("Company", "Year", "LineItem", "Line Item", "Value"):
+                if c in df.columns:
+                    keep_cols.append(c)
+            # require at least the core 4 fields
+            if not {"Company", "Year", "Value"}.issubset(set(keep_cols)) or not any(
+                x in keep_cols for x in ("LineItem", "Line Item")
+            ):
+                continue
+
+            frames.append(df[keep_cols].copy())
+
+        if not frames:
+            raise DataValidationError(
+                "Excel file has no readable sheets with required columns "
+                "(Company, Year, LineItem/Line Item, Value)."
+            )
+        return pd.concat(frames, ignore_index=True)
+
+    # If a .zip was passed (path or file-like), try to find the first .xlsx inside.
+    if isinstance(path_or_file, (str, bytes)) and str(path_or_file).lower().endswith(".zip"):
+        with ZipFile(path_or_file, "r") as zf:
+            # prefer .xlsx members
+            xlsx_members = [n for n in zf.namelist() if n.lower().endswith(".xlsx")]
+            if not xlsx_members:
+                raise DataValidationError("ZIP does not contain an .xlsx workbook.")
+            with zf.open(xlsx_members[0]) as f:
+                return _from_excel_bytes(f.read())
+
+    # Normal .xlsx path or file-like
+    if hasattr(path_or_file, "read"):  # file-like
+        return _from_excel_bytes(path_or_file.read())
+    else:  # filesystem path
+        with open(path_or_file, "rb") as f:
+            return _from_excel_bytes(f.read())
 
 
 @dataclass
