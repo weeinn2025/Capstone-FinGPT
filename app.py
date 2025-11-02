@@ -218,9 +218,7 @@ def read_anytabular(path: Path) -> pd.DataFrame:
             # else: concat all CSVs inside
             csv_names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
             if not csv_names:
-                raise DataValidationError(
-                    "ZIP does not contain a readable .xlsx workbook or any .csv files."
-                )
+                raise DataValidationError("ZIP does not contain a readable .xlsx workbook or any .csv files.")
             frames = []
             for name in csv_names:
                 with zf.open(name) as f:
@@ -250,9 +248,9 @@ def _apply_alias_renames(df: pd.DataFrame) -> pd.DataFrame:
     cols_lower = {c.lower().strip(): c for c in df.columns}
 
     company = _find_alias(cols_lower, _CANON["company"])
-    year    = _find_alias(cols_lower, _CANON["year"])
-    lineit  = _find_alias(cols_lower, _CANON["lineitem"])
-    value   = _find_alias(cols_lower, _CANON["value"])
+    year = _find_alias(cols_lower, _CANON["year"])
+    lineit = _find_alias(cols_lower, _CANON["lineitem"])
+    value = _find_alias(cols_lower, _CANON["value"])
 
     rename_map = {}
     if company and company != "Company":
