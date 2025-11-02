@@ -8,7 +8,6 @@ import hashlib
 import base64
 import json
 import os
-import zipfile
 from io import BytesIO
 from zipfile import ZipFile
 from pathlib import Path
@@ -167,8 +166,8 @@ def load_and_normalize(upload_path: Path) -> pd.DataFrame:
     return normalize_and_validate(raw_df)  # raises DataValidationError on issues
 
 
-# Inside Flask route after saving the upload to `upload_path`
-canonical = load_and_normalize(upload_path)
+# NOTE: Do not call load_and_normalize() at import time.
+# Call it inside the /upload route after you save the file to `upload_path`.
 
 
 def is_allowed_file(filename: str) -> bool:
@@ -178,7 +177,8 @@ def is_allowed_file(filename: str) -> bool:
 
 def read_zip_concat(zip_path: Path) -> pd.DataFrame:
     """Concatenate ALL CSV/XLSX files in a ZIP into one DataFrame."""
-    with Zipfile(zip_path, "r") as zf:
+
+    with ZipFile(zip_path, "r") as zf:
         members = [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
         if not members:
             raise ValueError("ZIP has no CSV/XLSX files.")
@@ -941,27 +941,19 @@ def upload_file():
         filepath = UPLOAD_FOLDER / file.filename
         file.save(filepath)
 
+    # --- canonical load + validation (CSV / XLSX[multi-sheet] / ZIP) ---
     try:
-        raw_df = read_anytabular(filepath)
+        # single call: read -> alias headers -> normalize & validate
+        use_df = load_and_normalize(filepath)
+    except DataValidationError as e:
+        flash(e.message)
+        return redirect(request.url_root)
     except Exception as e:
         flash(f"Error reading file: {e}")
         return redirect(request.url_root)
 
-    df_norm, warn = normalize_financial_df(raw_df)
-    if warn:
-        flash(warn)
-
+    # ensure we now have canonical columns
     needed = {"Company", "Year", "LineItem", "Value"}
-    use_df = df_norm if needed.issubset(set(df_norm.columns)) else raw_df
-
-    # ---- strict normalization & numeric validation (hard-fail on issues)
-    try:
-        # normalizes “Shareholders’ Equity” style labels and verifies Value is numeric
-        use_df = normalize_and_validate(use_df)
-    except (ValueError, DataValidationError) as e:
-        # friendlier error back to the browser instead of a 500
-        flash(str(e))
-        return redirect(request.url_root)
 
     if "Year" in use_df.columns:
         years_debug = sorted(int(v) for v in pd.unique(use_df["Year"].dropna()))
