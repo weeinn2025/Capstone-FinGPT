@@ -10,9 +10,13 @@ import json
 import os
 import zipfile
 from io import BytesIO
-from app_validators import normalize_and_validate, DataValidationError, normalize_financials_xlsx
 from zipfile import ZipFile
 from pathlib import Path
+from app_validators import (
+    normalize_and_validate,
+    DataValidationError,
+    normalize_financials_xlsx,  # new helper added
+)
 
 import matplotlib
 
@@ -155,14 +159,14 @@ def ai_smoke():
 
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
 
-# 1) Read
-raw_df = read_anytabular(upload_path)
+def load_and_normalize(upload_path: Path) -> pd.DataFrame:
+    """Used by /upload route: load file -> alias headers -> canonicalize."""
+    raw_df = read_anytabular(upload_path)
+    raw_df = _apply_alias_renames(raw_df)  # optional but helpful
+    return normalize_and_validate(raw_df)  # raises DataValidationError on issues
 
-# 2) Header aliasing (optional but recommended)
-raw_df = _apply_alias_renames(raw_df)  # <-- keep aliasing here
-
-# 3) Canonical validation & normalization
-canonical = normalize_and_validate(raw_df)
+# Inside Flask route after saving the upload to `upload_path`
+canonical = load_and_normalize(upload_path)
 
 
 def is_allowed_file(filename: str) -> bool:
@@ -172,7 +176,7 @@ def is_allowed_file(filename: str) -> bool:
 
 def read_zip_concat(zip_path: Path) -> pd.DataFrame:
     """Concatenate ALL CSV/XLSX files in a ZIP into one DataFrame."""
-    with zipfile.ZipFile(zip_path, "r") as zf:
+    with Zipfile(zip_path, "r") as zf:
         members = [n for n in zf.namelist() if n.lower().endswith((".csv", ".xlsx"))]
         if not members:
             raise ValueError("ZIP has no CSV/XLSX files.")
