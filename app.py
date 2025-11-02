@@ -10,8 +10,9 @@ import json
 import os
 import zipfile
 from io import BytesIO
+from app_validators import normalize_and_validate, DataValidationError, normalize_financials_xlsx
+from zipfile import ZipFile
 from pathlib import Path
-from app_validators import normalize_and_validate, DataValidationError
 
 import matplotlib
 
@@ -154,6 +155,15 @@ def ai_smoke():
 
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
 
+# 1) Read
+raw_df = read_anytabular(upload_path)
+
+# 2) Header aliasing (optional but recommended)
+raw_df = _apply_alias_renames(raw_df)  # <-- keep aliasing here
+
+# 3) Canonical validation & normalization
+canonical = normalize_and_validate(raw_df)
+
 
 def is_allowed_file(filename: str) -> bool:
     ext = Path(filename).suffix.lower().lstrip(".")
@@ -177,15 +187,47 @@ def read_zip_concat(zip_path: Path) -> pd.DataFrame:
 
 
 def read_anytabular(path: Path) -> pd.DataFrame:
-    """Read CSV/XLSX/ZIP into a DataFrame."""
-    ext = path.suffix.lower()
+    """
+    Load an uploaded file into a single DataFrame.
+    - .csv           : read via pandas
+    - .xlsx          : read ALL worksheets (multi-sheet aware) and concat
+    - .zip           : prefer first .xlsx inside (multi-sheet aware),
+                       otherwise concat all .csv files inside
+    Raises DataValidationError on unsupported/empty inputs.
+    """
+    p = Path(path)
+    ext = p.suffix.lower()
+
+    # Simple CSV
     if ext == ".csv":
-        return pd.read_csv(path)
+        return pd.read_csv(p)
+
+    # Excel workbook (handles multi-sheet workbooks)
     if ext == ".xlsx":
-        return pd.read_excel(path, engine="openpyxl")
+        return normalize_financials_xlsx(p)
+
+    # ZIP container
     if ext == ".zip":
-        return read_zip_concat(path)
-    raise ValueError(f"Unsupported file type: {ext}")
+        with ZipFile(p, "r") as zf:
+            # prefer first .xlsx inside
+            xlsx_names = [n for n in zf.namelist() if n.lower().endswith(".xlsx")]
+            if xlsx_names:
+                data = zf.read(xlsx_names[0])
+                return normalize_financials_xlsx(BytesIO(data))
+
+            # else: concat all CSVs inside
+            csv_names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
+            if not csv_names:
+                raise DataValidationError(
+                    "ZIP does not contain a readable .xlsx workbook or any .csv files."
+                )
+            frames = []
+            for name in csv_names:
+                with zf.open(name) as f:
+                    frames.append(pd.read_csv(f))
+            return pd.concat(frames, ignore_index=True)
+
+    raise DataValidationError(f"Unsupported file type: {ext}")
 
 
 _CANON = {
@@ -201,6 +243,31 @@ def _find_alias(cols_lower: dict[str, str], aliases: list[str]) -> str | None:
         if a in cols_lower:
             return cols_lower[a]
     return None
+
+
+def _apply_alias_renames(df: pd.DataFrame) -> pd.DataFrame:
+    # Map lower->original for quick lookup
+    cols_lower = {c.lower().strip(): c for c in df.columns}
+
+    company = _find_alias(cols_lower, _CANON["company"])
+    year    = _find_alias(cols_lower, _CANON["year"])
+    lineit  = _find_alias(cols_lower, _CANON["lineitem"])
+    value   = _find_alias(cols_lower, _CANON["value"])
+
+    rename_map = {}
+    if company and company != "Company":
+        rename_map[company] = "Company"
+    if year and year != "Year":
+        rename_map[year] = "Year"
+    # app_validators accepts "LineItem" or "Line Item"
+    if lineit and lineit not in ("LineItem", "Line Item"):
+        rename_map[lineit] = "LineItem"
+    if value and value != "Value":
+        rename_map[value] = "Value"
+
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
 
 
 def normalize_financial_df(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
