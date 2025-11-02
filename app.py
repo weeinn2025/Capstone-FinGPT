@@ -159,11 +159,13 @@ def ai_smoke():
 
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "zip"}
 
+
 def load_and_normalize(upload_path: Path) -> pd.DataFrame:
     """Used by /upload route: load file -> alias headers -> canonicalize."""
     raw_df = read_anytabular(upload_path)
     raw_df = _apply_alias_renames(raw_df)  # optional but helpful
     return normalize_and_validate(raw_df)  # raises DataValidationError on issues
+
 
 # Inside Flask route after saving the upload to `upload_path`
 canonical = load_and_normalize(upload_path)
