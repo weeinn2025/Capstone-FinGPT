@@ -98,6 +98,17 @@ GEMINI_AVAILABLE = bool(GEMINI_API_KEY)
 # How many years per company to send to the AI (prompt size control)
 AI_YEARS_PER_COMPANY = int(os.getenv("AI_YEARS_PER_COMPANY", "5"))  # default 5
 
+# --- Dynamic model selection (P0 / P2) ------------------------------------
+
+# Summary model:
+#  - defaults to GEMINI_MODEL (which already normalizes flash→gemini-2.5-flash)
+#  - can be overridden by env var AI_MODEL_SUMMARY
+AI_MODEL_SUMMARY = os.getenv("AI_MODEL_SUMMARY") or GEMINI_MODEL or "gemini-2.5-flash"
+
+# Ratios model:
+#  - defaults to gemini-2.5-pro unless overridden
+AI_MODEL_RATIOS = os.getenv("AI_MODEL_RATIOS") or "gemini-2.5-pro"
+
 # ---- 3) Flask app setup ---------------------------------------------------
 
 app = Flask(__name__)
@@ -1249,6 +1260,11 @@ def upload_file():
                 s2 = f"D/A~{da} | Rev YoY={ry} | NI YoY={ny}"
                 lines_ratios.append(s1 + s2)
 
+        # --- Hard caps to keep ratios prompt safe --------------------
+        MAX_LINES_RATIOS = 200
+        if len(lines_ratios) > MAX_LINES_RATIOS:
+            lines_ratios = lines_ratios[-MAX_LINES_RATIOS:]
+
         if lines_ratios:
             ratios_prompt = (
                 "You are a financial analyst. Using ONLY the Tier-1 ratios below (last 5 years per company), "
@@ -1263,7 +1279,7 @@ def upload_file():
             )
             try:
                 ratios_text = call_gemini_v1(
-                    prompt_text=_clean_prompt(ratios_prompt, max_len=20000),
+                    prompt_text=_clean_prompt(ratios_prompt, max_len=12000),
                     temperature=0.15,  # lower randomness → tighter, more factual prose
                     top_p=0.9,
                     top_k=32,
