@@ -1066,6 +1066,7 @@ def upload_file():
         prompt = _clean_prompt(prompt, max_len=12000)
 
         # Use configurable summary model (defaults to flash) and cache per model+mode+time bucket
+        # Choose summary model for this request and build cache key
         MODEL_SUMMARY = AI_MODEL_SUMMARY or "gemini-2.5-flash"
         _k1 = _make_ai_cache_key("summary", MODEL_SUMMARY, prompt)
         ai_text = _ai_cache_get(_k1) or ""
@@ -1090,7 +1091,7 @@ def upload_file():
                     top_p=1.0,  # full nucleus to reduce accidental truncation
                     top_k=32,
                     max_tokens=1400,  # more room for multi-paragraph output
-                    _model_override=MODEL_MAIN,
+                    _model_override=MODEL_SUMMARY,
                     _timeout_s=90,
                     _max_retries=6,
                 )
