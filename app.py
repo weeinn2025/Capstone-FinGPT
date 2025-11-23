@@ -656,6 +656,20 @@ _AI_CACHE_TTL = 3600.0  # seconds
 _AI_CACHE_MAX = 50
 
 
+def _make_ai_cache_key(mode: str, model: str, prompt: str) -> str:
+    """
+    Build a cache key that includes:
+      - mode (e.g. 'summary' vs 'ratios')
+      - model name
+      - time bucket (1 per TTL window)
+      - prompt text
+    This avoids cross-mixing between models/modes and naturally expires.
+    """
+    bucket = int(time.time() // _AI_CACHE_TTL)  # e.g. 1 key per hour
+    raw = f"{mode}|{model}|{bucket}|{prompt}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
 def _ai_cache_get(key: str) -> str | None:
     t_v = _AI_CACHE.get(key)
     if not t_v:
@@ -1051,9 +1065,10 @@ def upload_file():
         # Allow a bit more room for 5-year inputs and clean the text
         prompt = _clean_prompt(prompt, max_len=12000)
 
-        # Force pro for richer output; include the model in the cache key
-        MODEL_MAIN = "gemini-2.5-pro"
-        _k1 = hashlib.sha1((MODEL_MAIN + "|" + prompt).encode("utf-8")).hexdigest()
+        # Use configurable summary model (defaults to flash) and cache per model+mode+time bucket
+        # Choose summary model for this request and build cache key
+        MODEL_SUMMARY = AI_MODEL_SUMMARY or "gemini-2.5-flash"
+        _k1 = _make_ai_cache_key("summary", MODEL_SUMMARY, prompt)
         ai_text = _ai_cache_get(_k1) or ""
 
         if not ai_text:
@@ -1076,7 +1091,7 @@ def upload_file():
                     top_p=1.0,  # full nucleus to reduce accidental truncation
                     top_k=32,
                     max_tokens=1400,  # more room for multi-paragraph output
-                    _model_override=MODEL_MAIN,
+                    _model_override=MODEL_SUMMARY,
                     _timeout_s=90,
                     _max_retries=6,
                 )
