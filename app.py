@@ -700,6 +700,23 @@ def _clean_prompt(text: str | None, max_len: int = 120_000) -> str:
     return text.encode("utf-8", "ignore").decode("utf-8")[:max_len].strip()
 
 
+PROMPT_DEBUG_PATH = Path(__file__).parent / "prompt_debug.log"
+
+
+def _log_prompt_debug(mode: str, model: str, lines_count: int, prompt: str) -> None:
+    """Append a lightweight QA line to prompt_debug.log (best-effort)."""
+    try:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        char_len = len(prompt or "")
+        with PROMPT_DEBUG_PATH.open("a", encoding="utf-8") as f:
+            f.write(
+                f"{ts}\tmode={mode}\tmodel={model}\tlines={lines_count}\tchars={char_len}\n"
+            )
+    except Exception:
+        # Never break the app because of logging
+        pass
+
+
 # Heuristic: tidy, clip to last full sentence, ensure sentence-ending punctuation
 _SENT_END_RE = re.compile(r'[.!?]["\')\]]*$')
 
@@ -1085,6 +1102,7 @@ def upload_file():
                     "• No forecasts or advice. No new numbers beyond the table. End each paragraph with a period.\n\n"
                     "Data (company-year rows):\n" + "\n".join(lines)
                 )
+                _log_prompt_debug("summary", MODEL_SUMMARY, len(lines), prompt)
                 ai_text = call_gemini_v1(
                     prompt_text=_clean_prompt(prompt, max_len=12000),
                     temperature=0.05,  # steadier
@@ -1292,6 +1310,7 @@ def upload_file():
                 "• No advice, no forecasts, no numbers not shown; end each paragraph with a period.\n\n"
                 "Data (company-year rows):\n" + "\n".join(lines_ratios)
             )
+                _log_prompt_debug("ratios", AI_MODEL_RATIOS, len(lines_ratios), ratios_prompt)
             try:
                 ratios_text = call_gemini_v1(
                     prompt_text=_clean_prompt(ratios_prompt, max_len=12000),
@@ -1299,7 +1318,7 @@ def upload_file():
                     top_p=0.9,
                     top_k=32,
                     max_tokens=1100,  # # more space for per-company paragraphs
-                    _model_override="gemini-2.5-pro",  # <<< force pro here
+                    _model_override=AI_MODEL_RATIOS,
                 ).strip()
             except Exception as e:
                 ratios_text = ""
