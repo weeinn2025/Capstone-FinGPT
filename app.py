@@ -709,9 +709,7 @@ def _log_prompt_debug(mode: str, model: str, lines_count: int, prompt: str) -> N
         ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         char_len = len(prompt or "")
         with PROMPT_DEBUG_PATH.open("a", encoding="utf-8") as f:
-            f.write(
-                f"{ts}\tmode={mode}\tmodel={model}\tlines={lines_count}\tchars={char_len}\n"
-            )
+            f.write(f"{ts}\tmode={mode}\tmodel={model}\tlines={lines_count}\tchars={char_len}\n")
     except Exception:
         # Never break the app because of logging
         pass
