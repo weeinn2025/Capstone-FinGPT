@@ -1310,7 +1310,14 @@ def upload_file():
                 "• No advice, no forecasts, no numbers not shown; end each paragraph with a period.\n\n"
                 "Data (company-year rows):\n" + "\n".join(lines_ratios)
             )
-                _log_prompt_debug("ratios", AI_MODEL_RATIOS, len(lines_ratios), ratios_prompt)
+
+            _log_prompt_debug(
+                "ratios",
+                AI_MODEL_RATIOS,
+                len(lines_ratios),
+                ratios_prompt,
+            )
+
             try:
                 ratios_text = call_gemini_v1(
                     prompt_text=_clean_prompt(ratios_prompt, max_len=12000),
