@@ -222,12 +222,13 @@ Local Setup
 
 3.   *Install all the dependencies*:
 
-     ```bash
-     pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
+```
 
 4.   Configure the environment
 
-     Copy .env.example → .env
+     Copy.env.example → .env
 
      Set your FLASK_SECRET_KEY, GEMINI_API_KEY, and GEMINI_URL.
 
@@ -237,7 +238,7 @@ Local Setup
      GEMINI_MODEL	(Optional)  --- >  Model name; e.g., gemini-2.5-flash
      (If these are unset, analysis runs without AI text).
 
-     ![Environment variables screenshot](https://github.com/user-attachments/assets/dcc5c6e2-671a-4a1c-a708-b26ff7f323a2)
+![Environment variables screenshot](https://github.com/user-attachments/assets/dcc5c6e2-671a-4a1c-a708-b26ff7f323a2)
 
 
 5.   Then Run locally:
