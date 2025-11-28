@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>AI Financial Summary</title>
   <style>
     table { border-collapse: collapse; width: 80%; }
@@ -8,9 +9,46 @@
     th { background: #f2f2f2; }
     td:first-child, th:first-child { text-align: left; }
     .ai-summary { font-style: italic; border-top: 1px solid #ccc; padding-top: 1rem; }
+
+    /* --- Metrics table + alert dots --- */
+    .metrics-wrap { margin-top: 1.25rem; }
+    .metrics-table { width: 100%; border-collapse: collapse; }
+    .metrics-table th, .metrics-table td { border: 1px solid #ccc; padding: 6px; text-align: right; }
+    .metrics-table th { background: #f6f7f9; }
+    .metrics-table td.left, .metrics-table th.left { text-align: left; }
+
+    /* alert dots */
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
+    .dot.green { background:#16a34a; }
+    .dot.red   { background:#dc2626; }
+    .dot.gray  { background:#9ca3af; }   /* <- add this - neutral gray for not available */
+
+    .na { color:#777; font-style: italic; }  /* keep this for other places */
+
+    /* Legend + buttons spacing */
+    .legend{
+      display: inline-flex;            /* nice horizontal layout */
+      align-items: center;
+      gap: .5rem;
+      margin: .75rem 0 1rem;           /* ← space above and below legend */
+      font-size: 12px;
+      color: #333;
+  }
+    .legend .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .legend .dot.green{ background:#16a34a; }
+    .legend .dot.red{   background:#dc2626; }
+    .legend .dot.gray{  background:#9ca3af; }
+
+    /* keep the action buttons comfortably below the legend */
+    .actions{
+      margin: 0 0 1rem;                /* ← extra space under buttons block */
+      display: inline-flex;            /* (optional) put buttons on one row */
+      gap: .5rem;                      /* (optional) spacing between buttons */
+  }
   </style>
 </head>
 <body>
+
 
   {# ← Flashed error messages,to show any flash() messages from your Flask route #}
   {% with messages = get_flashed_messages() %}
@@ -44,29 +82,20 @@
       {% endfor %}
     </tbody>
   </table>
+  <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
+    <em>Data disclaimer:</em> This demo uses sample/illustrative figures and may mix
+    calendar-year and fiscal-year periods across companies. Values are simplified
+    and rounded. Do not rely on these numbers for decisions—please consult each
+    company’s latest 10-K/10-Q.
+  </p>
+
 
   {# ——— AI Analysis Section ——— #}
   {% if ai_text %}
     <div class="ai-summary">
-      <h3>AI Analysis</h3>
-      <p>{{ ai_text }}</p>
-    
-  
-    <!-- ↓↓↓ Download PDF form inserted here ↓↓↓ -->  
-    <form action="{{ url_for('download_pdf') }}" method="post">
-      <!-- single‑quote wrapper so the inner JSON (with its " marks) survives intact -->
-      <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'
-      >
-      <!-- ai_text is just plain text -->  
-      <input type="hidden" name="ai_text"  value="{{ ai_text }}"
-      >
-      <!-- new: ship the chart PNG as a base64 string -->
-      <input type="hidden" name="chart_data"  value="{{ chart_data }}"
-      > 
-      <button type="submit">Download as PDF</button>
-    </form>
-    <!-- ↑↑↑ end PDF form ↑↑↑ -->
-    
+      <h3>AI Analysis — Descriptive</h3>
+      <div class="prose" style="white-space:pre-wrap">{{ ai_text }}</div>
+    </div>
   {% else %}
     <p class="ai-summary">
       <span style="color:red;">
@@ -75,16 +104,212 @@
     </p>
   {% endif %}
 
-  {# ——— Financial Chart ——— #}
-  {% if chart_data %}
-    <div style="margin-top:1.5em;">
-      <h3>Revenue vs Net Income (in USD Billion)</h3>
-      <img src="data:image/png;base64,{{ chart_data }}" 
-         alt="Bar chart of revenue vs net income" 
-         style="max-width:100%;height:auto;border:1px solid #ccc;"/>
+  {# ——— Ratios Focus (independent) ——— #}
+  {% if ratios_text %}
+    <div class="ai-summary">
+      <h4>— Ratios Focus —</h4>
+      <div class="prose" style="white-space:pre-wrap">{{ ratios_text }}</div>
     </div>
   {% endif %}
 
-  <p><a href="{{ url_for('upload_file') }}">Upload another file</a></p>
+  {# ——— Tier-1 Ratios & Alerts ——— #}
+  {% if metrics is defined and not metrics.empty %}
+  <div class="metrics-wrap">
+    <h3>Tier-1 Financial Ratios & Alerts</h3>
+    <table class="metrics-table">
+      <thead>
+        <tr>
+          <th class="left">Company</th>
+          <th>Year</th>
+          <th>Revenue</th>
+          <th>Net Income</th>
+          <th>Net Margin</th>
+          <th>Debt/Equity</th>
+          <th>Debt/Assets</th>
+          <th>Rev YoY</th>
+          <th>NI YoY</th>
+          <th>Liquidity</th>
+          <th>Leverage</th>
+          <th>Rev Trend</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for _, r in metrics.iterrows() %}
+        <tr>
+          <td class="left">{{ r["Company"] }}</td>
+          <td>{{ r["Year"]|int }}</td>
+          <!-- numeric columns -->
+          <td>{{ r["revenue"]|default('NaN')|currency }}</td>
+          <td>{{ r["net_income"]|default('NaN')|currency }}</td>
+          <td>{{ r["net_margin"]|pct }}</td>
+          <td>
+            {# Debt/Equity: print number to 2dp if not NaN #}
+            {% set de = r["debt_to_equity"] %}
+            {{ 'NaN' if de != de else ('%.2f' % de) }}
+          </td>
+          <td>
+            {% set da = r["debt_to_assets"] %}
+            {{ 'NaN' if da != da else ('%.2f' % da) }}
+          </td>
+          <td>{{ r["rev_yoy"]|pct }}</td>  
+          <td>{{ r["ni_yoy"]|pct }}</td>
+
+          <!-- alert dots (always render one dot; gray when missing) -->
+          {% set liq = r["alert_liquidity"] %}
+          <td><span class="dot {{ liq if liq else 'gray' }}"></span></td>
+
+          {% set lev = r["alert_leverage"] %}
+          <td><span class="dot {{ lev if lev else 'gray' }}"></span></td>
+
+          {% set rtr = r["alert_revtrend"] %}
+          <td><span class="dot {{ rtr if rtr else 'gray' }}"></span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <!-- tiny Legend -->
+    <div class="legend">
+      Legend:
+      <span class="dot green"></span>green = OK /
+      <span class="dot red"></span>red = warning /
+      <span class="dot gray"></span>gray = not available
+    </div>
+  </div>  {# <-- close .metrics-wrap div #}  
+{% endif %}
+
+
+  {# ——— Download PDF & Excel buttons ——— #}
+  <!-- Always show action buttons (PDF & Excel), even if AI text is empty -->          
+  <!-- ↓↓↓ Download single PDF form inserted here with embedded data ↓↓↓ -->
+  <div class="actions">
+    <form method="post" action="{{ url_for('download_pdf') }}">      
+      <input type="hidden" name="summary"   value='{{ summary | tojson | safe }}'>
+      <!-- ai_text is just plain text -->
+      <textarea name="ai_text" hidden>{{ ai_text }}</textarea>
+      <textarea name="ratios_text" hidden>{{ ratios_text or '' }}</textarea>
+      <!-- latest-year bars (already there) -->
+      <input type="hidden" name="chart_data" value="{{ chart_data }}">
+      <!-- NEW: all-years line chart - ship the chart PNG as a base64 string --> 
+      <input type="hidden" name="chart_data_all" value="{{ chart_data_all or '' }}">
+      <button type="submit">Download as PDF</button>
+    </form>
+
+    <form method="post" action="{{ url_for('export_excel') }}">
+      <!-- keep it short: just post the summary and recompute on server -->
+      <input type="hidden" name="summary" value='{{ summary | tojson | safe }}'>
+      <button type="submit">Download Excel (with colors)</button>
+    </form>
+  </div>  {# <-- close .actions div #}
+
+
+  {# ——— Financial Chart ——— #}
+  {% if fig_json %}
+    <section style="margin-top:1.5em;">
+      <h3>Revenue vs Net Income or Profit — interactive</h3>
+
+      <!-- controls: year selector + big download button -->
+      <div style="margin:.75rem 0; display:flex; gap:.75rem; align-items:center;">
+        <label for="year-select"><strong>Year:</strong></label>
+        <select id="year-select"></select>
+        <button id="download-png" type="button">Download PNG</button>
+      </div>
+
+      <!-- single chart container -->
+      <div id="plotly-chart" style="width:100%;max-width:1000px;height:420px;"></div>
+
+      <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
+        <em>Data disclaimer:</em> This demo uses sample/illustrative figures and may mix
+        calendar-year and fiscal-year periods across companies. Values are simplified
+        and rounded. Do not rely on these numbers for decisions—please consult each
+        company’s latest 10-K/10-Q.
+      </p>
+    </section>
+
+
+    <!-- Plotly CDN (loads once on this page) -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script>
+      // `fig_json` is a JSON string generated with PlotlyJSONEncoder in Flask.
+      // We embed it as a real JS object (no quotes) using `|safe`.
+
+      // Data passed from Flask/Jinja
+      const initialFig   = {{ (fig_json or "null")|safe }};
+      const years        = {{ years|tojson }};
+      const figsByYear   = {{ (figs_by_year_json or "{}")|safe }};
+      const figAll       = {{ (fig_all_json or "null")|safe }};
+
+
+      // If we have "All years", render that by default; otherwise render the latest-year figure.
+      if (figAll) {
+        Plotly.newPlot('plotly-chart', figAll.data, figAll.layout, {
+          responsive: true, displaylogo: false });
+      } else if (initialFig) {
+        Plotly.newPlot('plotly-chart', initialFig.data, initialFig.layout || {}, {
+          responsive: true, displaylogo: false });
+      }
+
+
+      // Populate year selector (include "All years" if available)
+      const yearSel = document.getElementById('year-select');
+      if (figAll) {
+        const opt = document.createElement('option');
+        opt.value = '__ALL__';
+        opt.textContent = 'All years';
+        yearSel.appendChild(opt);
+
+        // NEW: default to All years and render it now
+        yearSel.value = '__ALL__';
+      }        
+      // Add the per-year options
+      (years || []).forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = y;
+        yearSel.appendChild(opt);
+      });
+
+      // If no All-years figure, default to the latest year (matches initial chart)
+      if (!figAll && years && years.length) {
+        yearSel.value = String(years[years.length - 1]);
+      }
+
+      // Swap figure when the selection changes
+      yearSel.addEventListener('change', (e) => {
+        const v = String(e.target.value);
+        if (v === '__ALL__' && figAll) {
+          Plotly.react('plotly-chart', figAll.data, figAll.layout, {responsive: true});
+        } else if (figsByYear[v]) {
+          const fy = figsByYear[v];
+          Plotly.react('plotly-chart', fy.data, fy.layout, { responsive: true });
+        }
+      });
+
+      // Big "Download PNG" button (in addition to Plotly’s camera icon)
+      document.getElementById('download-png').addEventListener('click', () => {
+        Plotly.downloadImage('plotly-chart', {
+          format: 'png',
+          filename: 'revenue_vs_net_income_or_profit',
+          scale: 2
+        });
+      });
+    </script>
+
+  {% elif chart_data %}
+    {# Fallback to the single static PNG if we don't have Plotly JSON #}
+    <section style="margin-top:1.5em;">
+      <h3>Revenue vs Net Income or Profit (static)</h3>
+      <img
+        src="data:image/png;base64,{{ chart_data }}"
+        alt="Bar chart of revenue vs net income or profit"
+        style="max-width:100%;height:auto;border:1px solid #ccc;"
+      />
+      <p style="color:#555;font-size:.95rem;margin-top:.5rem;">
+        <em>Data disclaimer:</em> Sample/illustrative data; year labels can reflect
+        non-aligned fiscal years across companies. Values may be normalized/rounded.
+      </p>
+    </section>
+  {% endif %}
+
+  <p><a href="{{ url_for('index') }}">Upload another file</a></p>
 </body>
 </html>
