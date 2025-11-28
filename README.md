@@ -1,7 +1,7 @@
 Capstone‑FinGPT
 ===============
 
-A lightweight Flask web app to ingest financial statements, preview and clean them, generate a concise AI-powered analysis + charts, and download a PDF or Excel report.
+A lightweight Flask web app to ingest financial statements, normalize them into a canonical schema, generate AI-powered multi-paragraph analysis, compute Tier-1 financial ratios, produce charts (Plotly), and export PDF/Excel reports.
 
 🚀 Live demo
 
@@ -24,7 +24,8 @@ https://github.com/weeinn2025/Capstone-FinGPT
 > against the company’s latest 10-K/10-Q or annual report.
 
 > 🔒 **Privacy Note**  
-> This project does not collect, store, or process any personal data.  
+> This project does not collect, store, or process any personal data.
+> Uploaded files are used in memory and discarded at runtime.  
 > All included datasets are illustrative, anonymized, or publicly available.  
 > Users are responsible for ensuring compliance with their own data protection, PDPA, or regulatory requirements when adapting this project.
 
@@ -32,41 +33,91 @@ https://github.com/weeinn2025/Capstone-FinGPT
 Features
 ========
 ## Feature Disclaimer  
-*  The application is a work in progress with ongoing enhancements, including advanced features, visualization, and AI.  
+*  The application is a work in progress with ongoing enhancements, including advanced features, visualization, and AI.
 *  This public release provides the core functionality only, while certain advanced features, analytics, and integrations are reserved for internal/private use and may be showcased selectively in the future (demo available upon request).
+*  Some advanced features (RAG, caching, AI tuning, CI hardening) are implemented but **private-mode features** may continue separately.
 
 1.   **Upload multiple formats - flexible ingest**
      (Accepted file formats for Data Input & Pre-processing)
-     - ✅   support **.xlsx**  (via `pandas` + `openpyxl`- same logical columns; multiple sheets are supported (first sheet is read by default))
+     - ✅   support **.xlsx**  (via `pandas` + `openpyxl`- same logical columns; multiple sheets are supported (first valid sheet detected automatically or is read by default))
      - ✅   support **.csv**   (header row required, example: Company,Year,LineItem,Value)
      - ✅   support **.zip**   (uploads a `.zip` that contains one or more CSV/XLSX files - the app reads the **first valid** tabular file inside; demo size ~5 MB)
+     - ✅   Auto-normalization → **Company | Year | LineItem | Value**
 
 2.   **Samples included**
      - ✅   Located in `samples/` to test quickly (CSV/XLSX + ZIP fixtures).
-     - ✅   Try the samples:   `sample_financials_2020_2024_xlsx` (for multi-company all-years line gragh), `sample_companies_2024.csv` (for multi-company grouped bars), `sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`.
+     - ✅   Try the samples:   `sample_financials_2020_2024_xlsx` (for multi-company all-years line gragh), `sample_companies_2024.csv` (for multi-company grouped bars), `sample_income_statement.csv`, `sample_income_statement.xlsx`, `sample_csv_only.zip`, `sample_financials_rev1_2020_2024.csv`, sample_financials_rev1_2020_2024.xlsx`.
+     - ✅   Use the Revised samples for latest enhancements:  `sample_financials_rev2_2020_2024.csv`, sample_financials_rev2_2020_2024.xlsx`.
 
 3.   **Preview before analysis**
      - ✅   see the **first 10 rows** on a `/preview` screen before analysis, then click **Analyze this file**.
 
-4.   **Best-effort normalization**
-     - ✅   Canonical schema (columns): Company | Year | LineItem | Value
-     - ✅   Trims headers, coerces numbers, drops blank rows.
+4.   **Canonical Normalization**
+     - ✅   Canonical schema (columns): Company | Year | LineItem | Value.
+     - ✅   Canonical LineItem mapping (Revenue, Net Income, Assets, Liabilities, Equity).
+     - ✅   Column trimming, whitespace cleanup.
+     - ✅   Trims headers, numeric coercion, drops blank rows. 
      - ✅   Falls back to raw columns if mapping fails.
+     - ✅   Strict data validation (invalid rows → friendly error with samples).
  
-5.   **AI summary**
+5.   **AI summary - AI Analysis (Gemini)**
      - ✅   Generates a concise 3-5 sentence narrative on multi-year performance via **Gemini** when `GEMINI_*` env vars are set.
      - ✅   Graceful fallback when AI is disabled.
-     - ✅   The app also works without AI keys, showing a friendly ‘AI disabled’ note while still rendering summary, charts, and PDF. 
+     - ✅   The app also works without AI keys, showing a friendly ‘AI disabled’ note while still rendering summary, charts, and PDF.
+     - ✅   Further details explained as below:
+
+> ### AI Modes
+Selectable via form or env:
+- `descriptive`   – Summary only  
+- `ratios`        – Ratios Focus only  
+- `both`          – Summary + Ratios (default)  
+- `none`          – No AI  
+
+> ### P0/P1/P2 AI Enhancements
+✓ P0 – Stability
+- Default **summary model**: `gemini-2.5-flash`  
+- Hard caps on:  
+  - rows per company  
+  - total prompt length (`_clean_prompt(max_len=12000)`)  
+
+✓ P1 – Safety & Determinism
+- New cache key: `mode|model|time_bucket|sha1(prompt)`  
+- Eliminates cross-mixing between summary/ratios models  
+- Explicit sort by `Company, Year` before prompt generation  
+
+✓ P2 – Observability & Routing
+- `AI_MODEL_SUMMARY` + `AI_MODEL_RATIOS` environment overrides  
+- Default routes:  
+  - Summary → `gemini-2.5-flash`  
+  - Ratios → `gemini-2.5-pro`  
+- Added `prompt_debug.log` capturing:  
+  - timestamp, mode, model, number of lines, prompt size  
+
+> ### AI Output
+- Multi-paragraph, per-company financial summaries  
+- Ratios Focus: 2–3 sentence analysis per company, covering:  
+  - Liquidity (margin trend)  
+  - Leverage (D/E, D/A)  
+  - Momentum (Rev YoY, NI YoY)  
+- Strictly no forecasts, no invented data  
+
+> ### Fallbacks
+- Secondary retries  
+- Ultra-short fallback  
+- Rule-based deterministic summary  
+
 
 6.   **Interactive charts (Plotly) - dashboard**
-     - ✅   Grouped bars of **Revenue** vs **Net income** for the **latest year**.
+     - ✅   Latest-year grouped bars of **Revenue** vs **Net income** for the **latest year**.
      - ✅   Canonicalizes line items so common names map correctly - Synonym mapping (≈):
      -       *  Revenue: “revenue”, “total revenue”, “sales”, “total sales”
      -       *  Net income: “net income”, “net profit”, “profit”
-     - ✅   Line chart: **Multi-year Revenue & Net income**.
-     - ✅   Fallback to Matplotlib PNG snapshot when Kaleido unavailable. For example, if Plotly JSON is not present, the page falls back to a static PNG.
+     - ✅   Multi-year line graph (all years, all companies): **Multi-year Revenue & Net income**.
+     - ✅   Generates PNG for PDF export.
+     - ✅   Plotly → Kaleido fallback to Matplotlib - Fallback to Matplotlib PNG snapshot when Kaleido unavailable. For example, if Plotly JSON is not present, the page falls back to a static PNG.
+  
 
-7.   **PDF export report - Data + Chart + AI analysis**
+7.   **PDF export report (WeasyPrint) - Data + Chart + AI analysis**
      - ✅   Includes data table, AI text, and the **same chart** as an image.
      - ✅   Renders a bar chart and lets you **download a nicely formatted PDF**.
      - ✅   One-click Download as PDF renders the data + AI text and embeds the same chart as a PNG.
@@ -79,17 +130,18 @@ Features
      - ✅   Tier-1 financial ratios and alerts table included.
      - ✅   Revenue & Net Income charts embedded (latest year + multi-year).
      - ✅   Fixed column widths for clean alignment in wide tables.
+     - ✅   Basically shows:  Summary table, AI Analysis, Ratios Focus section, Charts embedded as PNG, Clean layout with controlled column widths. 
 
 8.  **Excel export**
      - ✅   Tier-1 ratios + alerts exported as a formatted Excel workbook.
-     - ✅   Revenue & Net Income formatted with whole-number thousands.
+     - ✅   Revenue/Net Income formatting (k, % formatting).
      - ✅   Percentages shown with 2 decimals.
      - ✅   Alert columns display **colored filled cells (green/red/gray)** for clearer readability.   
 
 9.  **Safety & validation**
      - ✅   `GET /` (home page) is **not** rate-limited;  
-     - ✅   Uploads limited to 5 MB, `POST /preview` and `POST /upload` are limited to **10 requests per minute** per endpoint (demo safety).
-     - ✅   For production → configure a shared store or use Redis/Memcached with Flask-Limiter.  
+     - ✅   Uploads file size limited to 5-10 MB, `POST /preview` and `POST /upload` are limited to **10 requests per minute** per endpoint (demo safety).
+     - ✅   For production → configure a shared store or use Redis/Memcached with Flask-Limiter (Flask-Limiter with Redis optional). 
      - ✅   “This is what the output looks like” with short narrative - AI analysis:
 
  
@@ -130,12 +182,13 @@ How it flows
 ```md
 ```mermaid
 graph LR
-A[Upload CSV/XLSX/ZIP] --> B[Read + Normalize]
+A[Upload CSV/XLSX/ZIP] --> B[Normalize & Validate]
 B --> C[Preview table]
-B --> D[AI summary (Gemini)]
-B --> E[Plotly interactive charts/grouped bars (latest year)]
-E --> F[PNG snapshot via Kaleido]
-F --> G[PDF export (WeasyPrint)]
+B --> D[AI Summary (Gemini)]
+B --> E[AI Ratios Focus]
+B --> F[Plotly interactive charts/grouped bars (latest year)]
+F --> G[PNG Export (WeasyPrint)]
+G --> H[PDF Export]
 
 
 Prerequisites
@@ -184,6 +237,10 @@ Local Setup
      GEMINI_API_KEY	(Optional)  --- >  Google Gemini API key
      GEMINI_MODEL	(Optional)  --- >  Model name; e.g., gemini-1.5-flash
      (If these are unset, analysis runs without AI text).
+
+      <img width="648" height="399" alt="image" src="https://github.com/user-attachments/assets/616e418f-5c27-49b6-a69b-785a5d475574" />
+ 
+     
 
 5.   Then Run locally:
      flask run or python app.py
@@ -247,7 +304,9 @@ Render (✅ Done)
      *  python-3.11.11
 2.   Ensure requirements.txt includes:
      *  gunicorn==20.1.0
-3.   Connect your GitHub repo & deploy.  Cold starts expected on free tier.
+3.   Environment variables set on Render dashboard.
+4.   Connect your GitHub repo & deploy.  Cold starts expected on free tier.
+5.   Static logs + AI debug logs available in Render console
 
 
 Troubleshooting
@@ -268,15 +327,18 @@ Project Structure
 
 Capstone-FinGPT/
 ├─ app.py
+├─ app_validators.py
 ├─ requirements.txt
 ├─ runtime.txt
 ├─ Dockerfile
 ├─ docker-compose.yml
 ├─ README.md
+├─ README_CI.md
 ├─ .env.example
 ├─ .gitignore
 ├─ .flake8
 ├─ .pre-commit-config.yaml
+├─ prompt_debug.log        # (P2)
 ├─ templates/
 │  ├─ index.html
 │  ├─ preview.html
@@ -285,6 +347,8 @@ Capstone-FinGPT/
 ├─ samples/
 |  ├─ sample_financials_2020_2024.csv_only.zip
 |  ├─ sample_financials_2020_2024.xlsx.zip
+|  ├─ sample_financials_rev2_2020_2024.csv.zip
+|  ├─ sample_financials_rev2_2020_2024.xlsx.zip
 │  ├─ sample_companies_2024.csv
 │  ├─ sample_income_statement.csv
 │  ├─ sample_income_statement.xlsx
@@ -299,6 +363,9 @@ Capstone-FinGPT/
 │  ├─ pdf_report_ai_analysis.pdf
 ├─ tests/                 # add unit tests here
 │  └─ (placeholder)
+│  ├─ test_smoke.py
+│  ├─ test_data_validation.py
+│  ├─ test_canonical_financials.py
 └─ .github/workflows/
    └─ pr-ci.yml           # PR CI: lint, test, build smoke
 
