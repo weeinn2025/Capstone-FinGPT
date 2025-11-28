@@ -220,9 +220,8 @@ Local Setup
      GEMINI_API_KEY=<your key>
      GEMINI_URL=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent
 
-
 3.   *Install all the dependencies*:
-     ```md
+
      ```bash
      pip install -r requirements.txt
 
@@ -235,12 +234,11 @@ Local Setup
      *  Environment variables:
 
      GEMINI_API_KEY	(Optional)  --- >  Google Gemini API key
-     GEMINI_MODEL	(Optional)  --- >  Model name; e.g., gemini-1.5-flash
+     GEMINI_MODEL	(Optional)  --- >  Model name; e.g., gemini-2.5-flash
      (If these are unset, analysis runs without AI text).
 
-      <img width="648" height="399" alt="image" src="https://github.com/user-attachments/assets/616e418f-5c27-49b6-a69b-785a5d475574" />
- 
-     
+     ![Environment variables screenshot](https://github.com/user-attachments/assets/dcc5c6e2-671a-4a1c-a708-b26ff7f323a2)
+
 
 5.   Then Run locally:
      flask run or python app.py
