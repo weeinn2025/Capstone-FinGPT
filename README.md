@@ -324,6 +324,7 @@ Troubleshooting
 Project Structure
 =================
 
+```text
 Capstone-FinGPT/
 ├─ app.py
 ├─ app_validators.py
